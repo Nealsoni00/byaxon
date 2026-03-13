@@ -47,6 +47,18 @@ export default async function SubdomainPage({
     );
   }
 
+  // Handle iframe content
+  if (config.type === 'iframe') {
+    return (
+      <iframe
+        src={config.content}
+        className="w-full h-screen border-0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+      />
+    );
+  }
+
   // Handle markdown content
   return (
     <div className="min-h-screen bg-zinc-950">

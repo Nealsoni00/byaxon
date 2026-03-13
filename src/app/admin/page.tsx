@@ -23,7 +23,7 @@ export default function AdminPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     subdomain: '',
-    type: 'markdown' as 'redirect' | 'markdown' | 'html',
+    type: 'markdown' as 'redirect' | 'markdown' | 'html' | 'iframe',
     content: '',
     title: '',
     description: '',
@@ -274,12 +274,13 @@ export default function AdminPage() {
                     />
                     <select
                       value={formData.type}
-                      onChange={(e) => setFormData({ ...formData, type: e.target.value as 'redirect' | 'markdown' | 'html' })}
+                      onChange={(e) => setFormData({ ...formData, type: e.target.value as 'redirect' | 'markdown' | 'html' | 'iframe' })}
                       className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm focus:outline-none focus:border-zinc-500"
                     >
                       <option value="markdown">Markdown</option>
                       <option value="redirect">Redirect</option>
                       <option value="html">HTML</option>
+                      <option value="iframe">iFrame</option>
                     </select>
                   </div>
                   <input
@@ -290,7 +291,7 @@ export default function AdminPage() {
                     className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm focus:outline-none focus:border-zinc-500"
                   />
                   <textarea
-                    placeholder={formData.type === 'redirect' ? 'https://example.com' : 'Content... (use ![alt](url) for images)'}
+                    placeholder={formData.type === 'redirect' || formData.type === 'iframe' ? 'https://example.com' : 'Content... (use ![alt](url) for images)'}
                     value={formData.content}
                     onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                     className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm focus:outline-none focus:border-zinc-500 min-h-[200px] font-mono"
@@ -335,7 +336,7 @@ export default function AdminPage() {
                           </div>
                           <select
                             value={formData.type}
-                            onChange={(e) => setFormData({ ...formData, type: e.target.value as 'redirect' | 'markdown' | 'html' })}
+                            onChange={(e) => setFormData({ ...formData, type: e.target.value as 'redirect' | 'markdown' | 'html' | 'iframe' })}
                             className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm"
                           >
                             <option value="markdown">Markdown</option>
@@ -378,6 +379,7 @@ export default function AdminPage() {
                             <span className={`text-xs px-2 py-0.5 rounded ${
                               sub.type === 'redirect' ? 'bg-blue-900 text-blue-300' :
                               sub.type === 'markdown' ? 'bg-green-900 text-green-300' :
+                              sub.type === 'iframe' ? 'bg-orange-900 text-orange-300' :
                               'bg-purple-900 text-purple-300'
                             }`}>
                               {sub.type}
@@ -386,6 +388,8 @@ export default function AdminPage() {
                           <div className="text-sm text-zinc-400">
                             {sub.type === 'redirect' ? (
                               <span>→ {sub.content}</span>
+                            ) : sub.type === 'iframe' ? (
+                              <span>⧉ {sub.content}</span>
                             ) : (
                               <span>{sub.title || 'Untitled'}</span>
                             )}

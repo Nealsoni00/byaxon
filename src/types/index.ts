@@ -1,7 +1,7 @@
 export interface SubdomainConfig {
   subdomain: string;
-  type: 'redirect' | 'markdown' | 'html';
-  content: string; // URL for redirect, markdown/html content for others
+  type: 'redirect' | 'markdown' | 'html' | 'iframe';
+  content: string; // URL for redirect/iframe, markdown/html content for others
   title?: string;
   description?: string;
   createdAt: string;
