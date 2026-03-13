@@ -27,7 +27,7 @@ export default function AdminPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     subdomain: '',
-    type: 'markdown' as 'redirect' | 'markdown' | 'html' | 'iframe',
+    type: 'markdown' as 'redirect' | 'markdown' | 'html' | 'iframe' | 'custom',
     content: '',
     title: '',
     description: '',
@@ -284,7 +284,7 @@ export default function AdminPage() {
                     />
                     <select
                       value={formData.type}
-                      onChange={(e) => setFormData({ ...formData, type: e.target.value as 'redirect' | 'markdown' | 'html' | 'iframe' })}
+                      onChange={(e) => setFormData({ ...formData, type: e.target.value as 'redirect' | 'markdown' | 'html' | 'iframe' | 'custom' })}
                       className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm focus:outline-none focus:border-zinc-500"
                     >
                       <option value="markdown">Markdown</option>
@@ -346,12 +346,13 @@ export default function AdminPage() {
                           </div>
                           <select
                             value={formData.type}
-                            onChange={(e) => setFormData({ ...formData, type: e.target.value as 'redirect' | 'markdown' | 'html' | 'iframe' })}
+                            onChange={(e) => setFormData({ ...formData, type: e.target.value as 'redirect' | 'markdown' | 'html' | 'iframe' | 'custom' })}
                             className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm"
                           >
                             <option value="markdown">Markdown</option>
                             <option value="redirect">Redirect</option>
                             <option value="html">HTML</option>
+                            <option value="iframe">iFrame</option>
                           </select>
                         </div>
                         <input
