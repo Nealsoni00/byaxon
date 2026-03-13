@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 
 const OPTIMUS_IMG = 'https://igaqhhu6xiolnmsh.public.blob.vercel-storage.com/images/1773363194597-optimuschime.png';
 const PRIME_IMG = 'https://igaqhhu6xiolnmsh.public.blob.vercel-storage.com/images/1773407964880-prime-chime.png';
@@ -72,6 +72,28 @@ export default function ChimeFighters() {
   const keysPressed = useRef<Set<string>>(new Set());
   const effectId = useRef(0);
   const aiDecisionTimer = useRef(0);
+
+  // Pre-generate random patterns for skyline (so they don't change on re-render)
+  const skylineData = useMemo(() => ({
+    buildings: [
+      [...Array(24)].map(() => Math.random() > 0.4),
+      [...Array(20)].map(() => Math.random() > 0.5),
+      [...Array(30)].map(() => Math.random() > 0.45),
+      [...Array(15)].map(() => Math.random() > 0.5),
+      [...Array(21)].map(() => Math.random() > 0.45),
+      [...Array(28)].map(() => Math.random() > 0.5),
+      [...Array(18)].map(() => Math.random() > 0.55),
+      [...Array(32)].map(() => Math.random() > 0.5),
+      [...Array(12)].map(() => Math.random() > 0.5),
+    ],
+    stars: [...Array(30)].map(() => ({
+      size: Math.random() > 0.7 ? 3 : 2,
+      left: Math.random() * 100,
+      top: Math.random() * 100,
+      opacity: 0.4 + Math.random() * 0.6,
+      duration: 2 + Math.random() * 3
+    }))
+  }), []);
 
   const createPlayer = (x: number, facing: 'left' | 'right'): Player => ({
     x, y: GROUND_Y, vx: 0, vy: 0, health: 100,
@@ -178,10 +200,9 @@ export default function ChimeFighters() {
     const handleKeyDown = (e: KeyboardEvent) => {
       keysPressed.current.add(e.key.toLowerCase());
 
-      if (gameState === 'menu' && (e.key === ' ' || e.key.toLowerCase() === 'f')) {
-        if (playerName.trim() || gameMode === '2p') {
-          startGame();
-        }
+      // For 2P mode, allow SPACE or F to start (no name input needed)
+      if (gameState === 'menu' && gameMode === '2p' && (e.key === ' ' || e.key.toLowerCase() === 'f')) {
+        startGame();
       }
       if ((gameState === 'roundEnd' || gameState === 'gameOver') && e.key === ' ') {
         if (gameState === 'gameOver') {
@@ -216,7 +237,7 @@ export default function ChimeFighters() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [gameState, startGame]);
+  }, [gameState, startGame, playerName, gameMode, round]);
 
   // Timer
   useEffect(() => {
@@ -566,7 +587,7 @@ export default function ChimeFighters() {
             <div style={{ width: '8px', height: '30px', background: '#1a1a2e', margin: '0 auto' }} />
             <div style={{ width: '20px', height: '120px', background: '#1a1a2e', margin: '0 auto', boxShadow: 'inset 2px 0 0 #252540, inset -2px 0 0 #0f0f1a' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 4px)', gap: '2px', padding: '8px 2px' }}>
-                {[...Array(24)].map((_, i) => <div key={i} style={{ width: '4px', height: '4px', background: Math.random() > 0.4 ? '#ffeb3b' : '#1a1a2e' }} />)}
+                {skylineData.buildings[0].map((lit, i) => <div key={i} style={{ width: '4px', height: '4px', background: lit ? '#ffeb3b' : '#1a1a2e' }} />)}
               </div>
             </div>
             <div style={{ width: '30px', height: '40px', background: '#1a1a2e', margin: '0 auto', boxShadow: 'inset 2px 0 0 #252540' }} />
@@ -575,7 +596,7 @@ export default function ChimeFighters() {
           {/* Building 1 */}
           <div style={{ width: '50px', height: '100px', background: '#151525', boxShadow: 'inset 2px 0 0 #202035' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 6px)', gap: '4px', padding: '8px' }}>
-              {[...Array(20)].map((_, i) => <div key={i} style={{ width: '6px', height: '6px', background: Math.random() > 0.5 ? '#ffd54f' : '#151525' }} />)}
+              {skylineData.buildings[1].map((lit, i) => <div key={i} style={{ width: '6px', height: '6px', background: lit ? '#ffd54f' : '#151525' }} />)}
             </div>
           </div>
 
@@ -584,7 +605,7 @@ export default function ChimeFighters() {
             <div style={{ width: '6px', height: '20px', background: '#1f1f35', margin: '0 auto' }} />
             <div style={{ width: '30px', height: '180px', background: 'linear-gradient(to bottom, #1f1f35, #151528)', margin: '0 auto', clipPath: 'polygon(10% 0, 90% 0, 100% 100%, 0 100%)' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 5px)', gap: '3px', padding: '10px 4px' }}>
-                {[...Array(30)].map((_, i) => <div key={i} style={{ width: '5px', height: '5px', background: Math.random() > 0.45 ? '#4fc3f7' : '#1f1f35' }} />)}
+                {skylineData.buildings[2].map((lit, i) => <div key={i} style={{ width: '5px', height: '5px', background: lit ? '#4fc3f7' : '#1f1f35' }} />)}
               </div>
             </div>
           </div>
@@ -592,7 +613,7 @@ export default function ChimeFighters() {
           {/* Building 2 */}
           <div style={{ width: '60px', height: '80px', background: '#181830', boxShadow: 'inset 3px 0 0 #222240' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 6px)', gap: '4px', padding: '6px' }}>
-              {[...Array(15)].map((_, i) => <div key={i} style={{ width: '6px', height: '6px', background: Math.random() > 0.5 ? '#ffcc02' : '#181830' }} />)}
+              {skylineData.buildings[3].map((lit, i) => <div key={i} style={{ width: '6px', height: '6px', background: lit ? '#ffcc02' : '#181830' }} />)}
             </div>
           </div>
 
@@ -602,7 +623,7 @@ export default function ChimeFighters() {
             <div style={{ width: '24px', height: '15px', background: '#202038', margin: '0 auto', borderRadius: '4px 4px 0 0' }} />
             <div style={{ width: '30px', height: '110px', background: '#1a1a30', margin: '0 auto' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 5px)', gap: '3px', padding: '8px 5px' }}>
-                {[...Array(21)].map((_, i) => <div key={i} style={{ width: '5px', height: '5px', background: Math.random() > 0.45 ? '#fff176' : '#1a1a30' }} />)}
+                {skylineData.buildings[4].map((lit, i) => <div key={i} style={{ width: '5px', height: '5px', background: lit ? '#fff176' : '#1a1a30' }} />)}
               </div>
             </div>
           </div>
@@ -610,56 +631,69 @@ export default function ChimeFighters() {
           {/* Building 3 */}
           <div style={{ width: '45px', height: '130px', background: '#161628', boxShadow: 'inset 2px 0 0 #1f1f38' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 5px)', gap: '4px', padding: '8px 6px' }}>
-              {[...Array(28)].map((_, i) => <div key={i} style={{ width: '5px', height: '5px', background: Math.random() > 0.5 ? '#ffe082' : '#161628' }} />)}
+              {skylineData.buildings[5].map((lit, i) => <div key={i} style={{ width: '5px', height: '5px', background: lit ? '#ffe082' : '#161628' }} />)}
             </div>
           </div>
 
           {/* Building 4 */}
           <div style={{ width: '55px', height: '90px', background: '#141428', boxShadow: 'inset 2px 0 0 #1c1c38' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 5px)', gap: '4px', padding: '6px' }}>
-              {[...Array(18)].map((_, i) => <div key={i} style={{ width: '5px', height: '5px', background: Math.random() > 0.55 ? '#ffb74d' : '#141428' }} />)}
+              {skylineData.buildings[6].map((lit, i) => <div key={i} style={{ width: '5px', height: '5px', background: lit ? '#ffb74d' : '#141428' }} />)}
             </div>
           </div>
 
           {/* Building 5 */}
           <div style={{ width: '40px', height: '150px', background: '#171730', boxShadow: 'inset 2px 0 0 #202042' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 6px)', gap: '4px', padding: '8px' }}>
-              {[...Array(32)].map((_, i) => <div key={i} style={{ width: '6px', height: '6px', background: Math.random() > 0.5 ? '#81d4fa' : '#171730' }} />)}
+              {skylineData.buildings[7].map((lit, i) => <div key={i} style={{ width: '6px', height: '6px', background: lit ? '#81d4fa' : '#171730' }} />)}
             </div>
           </div>
 
           {/* Building 6 */}
           <div style={{ width: '50px', height: '70px', background: '#151528' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 6px)', gap: '4px', padding: '6px' }}>
-              {[...Array(12)].map((_, i) => <div key={i} style={{ width: '6px', height: '6px', background: Math.random() > 0.5 ? '#fff59d' : '#151528' }} />)}
+              {skylineData.buildings[8].map((lit, i) => <div key={i} style={{ width: '6px', height: '6px', background: lit ? '#fff59d' : '#151528' }} />)}
             </div>
           </div>
         </div>
 
         {/* Stars */}
         <div className="absolute top-0 left-0 right-0 h-40 pointer-events-none">
-          {[...Array(30)].map((_, i) => (
+          {skylineData.stars.map((star, i) => (
             <div
               key={i}
               className="absolute bg-white rounded-full"
               style={{
-                width: Math.random() > 0.7 ? '3px' : '2px',
-                height: Math.random() > 0.7 ? '3px' : '2px',
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                opacity: 0.4 + Math.random() * 0.6,
-                animation: `twinkle ${2 + Math.random() * 3}s infinite`
+                width: `${star.size}px`,
+                height: `${star.size}px`,
+                left: `${star.left}%`,
+                top: `${star.top}%`,
+                opacity: star.opacity,
+                animation: `twinkle ${star.duration}s infinite`
               }}
             />
           ))}
         </div>
+
+        {/* Mini Leaderboard - always visible in corner */}
+        {gameMode === '1p' && leaderboard.length > 0 && gameState !== 'menu' && (
+          <div className="absolute top-4 right-4 bg-black/60 rounded p-2 text-xs w-32 pointer-events-none">
+            <div className="text-purple-400 font-bold mb-1">🏆 TOP 5</div>
+            {leaderboard.slice(0, 5).map((entry, i) => (
+              <div key={entry.name} className={`flex justify-between ${entry.name.toLowerCase() === playerName.toLowerCase() ? 'text-yellow-400' : 'text-zinc-400'}`}>
+                <span className="truncate">{i + 1}. {entry.name}</span>
+                <span>{entry.score}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Ground */}
         <div className="absolute bottom-0 left-0 right-0 h-20" style={{ background: 'linear-gradient(to top, #0a0a12, #151520)', imageRendering: 'pixelated' }} />
         <div className="absolute bottom-20 left-0 right-0 h-1" style={{ background: '#252530' }} />
 
         {/* Health Bars */}
-        <div className="absolute top-4 left-4 right-4 flex justify-between gap-8">
+        <div className="absolute top-4 left-4 right-4 flex justify-between gap-4">
           {/* P1 Health */}
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
@@ -684,6 +718,21 @@ export default function ChimeFighters() {
               />
             </div>
             <div className="text-xs text-zinc-500 mt-0.5">SPECIAL {p1.specialCharge >= 100 ? '✓ READY!' : ''}</div>
+          </div>
+
+          {/* Round & Score Center */}
+          <div className="flex flex-col items-center justify-center min-w-24">
+            <div className="text-white font-black text-lg">
+              ROUND {round}/{TOTAL_ROUNDS}
+            </div>
+            <div className="text-zinc-400 text-xs">
+              {optimusScore} - {primeScore}
+            </div>
+            {gameMode === '1p' && gameState === 'fighting' && (
+              <div className="text-green-400 text-xs font-bold mt-1">
+                +{Math.max(0, 100 + p1.health + (timeLeft * 2) + Math.floor(totalDamageDealt.current * 0.5))} pts
+              </div>
+            )}
           </div>
 
           {/* P2 Health */}
@@ -866,53 +915,72 @@ export default function ChimeFighters() {
               </div>
             ) : (
               <>
-                {/* Name Input for 1P mode */}
-                {gameMode === '1p' && (
-                  <div className="mb-4">
-                    <input
-                      type="text"
-                      placeholder="Enter your name for leaderboard"
-                      value={playerName}
-                      onChange={(e) => setPlayerName(e.target.value.slice(0, 20))}
-                      className="px-4 py-2 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-center w-64 focus:outline-none focus:border-purple-500"
-                      maxLength={20}
-                    />
-                  </div>
-                )}
-
-                <div className="text-yellow-400 text-xl font-bold animate-bounce mb-4">
-                  Press SPACE or F to Start!
-                </div>
-
+                {/* 1P Mode: Name input + Start button */}
                 {gameMode === '1p' ? (
-                  <div className="text-center text-sm text-zinc-300">
-                    <div className="text-red-400 font-bold mb-2">YOUR CONTROLS (OPTIMUS)</div>
-                    <div>W - Jump | A/D - Move</div>
-                    <div>G - Punch | H - Kick | J - Special</div>
-                    <div className="mt-3 text-yellow-400 font-bold">
-                      🤖 Prime Chime is controlled by AI
+                  <div className="text-center">
+                    <div className="mb-4">
+                      <label className="block text-sm text-zinc-400 mb-2">Enter your name for leaderboard:</label>
+                      <input
+                        type="text"
+                        placeholder="Your name"
+                        value={playerName}
+                        onChange={(e) => setPlayerName(e.target.value.slice(0, 20))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            startGame();
+                          }
+                        }}
+                        className="px-4 py-2 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-center w-64 focus:outline-none focus:border-purple-500"
+                        maxLength={20}
+                      />
                     </div>
-                    <div className="mt-2 text-xs text-zinc-500">
-                      Score = 100 + HP remaining + (Time × 2) + Damage bonus
+
+                    <div className="text-purple-400 font-bold text-sm mb-2">
+                      ⚔️ BEST OF {TOTAL_ROUNDS} ROUNDS ⚔️
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => startGame()}
+                      className="px-8 py-3 bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-500 hover:to-orange-400 text-white text-xl font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all mb-4"
+                    >
+                      🎮 START GAME
+                    </button>
+
+                    <div className="text-sm text-zinc-400 mt-4">
+                      <div className="text-zinc-500 mb-2">Controls:</div>
+                      <div className="text-xs">W - Jump | A/D - Move | G - Punch | H - Kick | J - Special</div>
+                      <div className="mt-2 text-yellow-400 text-xs">
+                        🤖 Prime Chime is controlled by AI
+                      </div>
+                      <div className="mt-2 text-green-400 text-xs">
+                        Win rounds to earn points for the leaderboard!
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-8 text-sm text-zinc-300">
-                    <div>
-                      <div className="text-red-400 font-bold mb-2">PLAYER 1 (OPTIMUS)</div>
-                      <div>W - Jump</div>
-                      <div>A/D - Move</div>
-                      <div>G - Punch</div>
-                      <div>H - Kick</div>
-                      <div>J - Special (when full)</div>
+                  <div className="text-center">
+                    <div className="text-yellow-400 text-xl font-bold animate-bounce mb-4">
+                      Press SPACE or F to Start!
                     </div>
-                    <div>
-                      <div className="text-yellow-400 font-bold mb-2">PLAYER 2 (PRIME)</div>
-                      <div>↑ - Jump</div>
-                      <div>←/→ - Move</div>
-                      <div>, or 1 - Punch</div>
-                      <div>. or 2 - Kick</div>
-                      <div>/ or 3 - Special (when full)</div>
+                    <div className="grid grid-cols-2 gap-8 text-sm text-zinc-300">
+                      <div>
+                        <div className="text-red-400 font-bold mb-2">PLAYER 1 (OPTIMUS)</div>
+                        <div>W - Jump</div>
+                        <div>A/D - Move</div>
+                        <div>G - Punch</div>
+                        <div>H - Kick</div>
+                        <div>J - Special (when full)</div>
+                      </div>
+                      <div>
+                        <div className="text-yellow-400 font-bold mb-2">PLAYER 2 (PRIME)</div>
+                        <div>↑ - Jump</div>
+                        <div>←/→ - Move</div>
+                        <div>, or 1 - Punch</div>
+                        <div>. or 2 - Kick</div>
+                        <div>/ or 3 - Special (when full)</div>
+                      </div>
                     </div>
                   </div>
                 )}
