@@ -13,6 +13,7 @@ const GRAVITY = 0.8;
 const JUMP_FORCE = -18;
 const MOVE_SPEED = 8;
 const ROUND_TIME = 60;
+const TOTAL_ROUNDS = 3;
 
 interface Player {
   x: number;
@@ -178,17 +179,30 @@ export default function ChimeFighters() {
       keysPressed.current.add(e.key.toLowerCase());
 
       if (gameState === 'menu' && (e.key === ' ' || e.key.toLowerCase() === 'f')) {
-        startGame();
+        if (playerName.trim() || gameMode === '2p') {
+          startGame();
+        }
       }
       if ((gameState === 'roundEnd' || gameState === 'gameOver') && e.key === ' ') {
         if (gameState === 'gameOver') {
+          // Reset everything for new game
           setOptimusScore(0);
           setPrimeScore(0);
           setRound(1);
+          setGameState('menu');
+          // Refresh leaderboard
+          fetch('/api/leaderboard')
+            .then(res => res.json())
+            .then(data => setLeaderboard(Array.isArray(data) ? data : []))
+            .catch(() => {});
+        } else if (round >= TOTAL_ROUNDS) {
+          // All rounds complete - go to game over
+          setGameState('gameOver');
         } else {
+          // Next round
           setRound(r => r + 1);
+          startGame();
         }
-        startGame();
       }
     };
 
@@ -499,6 +513,10 @@ export default function ChimeFighters() {
           0%, 100% { filter: drop-shadow(0 0 10px gold); }
           50% { filter: drop-shadow(0 0 30px gold); }
         }
+        @keyframes twinkle {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
       `}</style>
 
       {/* Header */}
@@ -532,12 +550,113 @@ export default function ChimeFighters() {
       {/* Game Area */}
       <div
         ref={canvasRef}
-        className="relative bg-gradient-to-b from-indigo-900 via-purple-900 to-zinc-900 rounded-lg overflow-hidden border-4 border-zinc-700"
-        style={{ width: GAME_WIDTH, height: GAME_HEIGHT, maxWidth: '100%' }}
+        className="relative rounded-lg overflow-hidden border-4 border-zinc-700"
+        style={{
+          width: GAME_WIDTH,
+          height: GAME_HEIGHT,
+          maxWidth: '100%',
+          background: 'linear-gradient(to bottom, #0a0a1a 0%, #1a1a3a 30%, #2d1b4e 60%, #1a1a2e 100%)',
+          imageRendering: 'pixelated'
+        }}
       >
+        {/* Pixel Art NYC Skyline */}
+        <div className="absolute bottom-20 left-0 right-0 flex items-end justify-around" style={{ height: '280px', imageRendering: 'pixelated' }}>
+          {/* Empire State Building */}
+          <div className="relative" style={{ width: '40px' }}>
+            <div style={{ width: '8px', height: '30px', background: '#1a1a2e', margin: '0 auto' }} />
+            <div style={{ width: '20px', height: '120px', background: '#1a1a2e', margin: '0 auto', boxShadow: 'inset 2px 0 0 #252540, inset -2px 0 0 #0f0f1a' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 4px)', gap: '2px', padding: '8px 2px' }}>
+                {[...Array(24)].map((_, i) => <div key={i} style={{ width: '4px', height: '4px', background: Math.random() > 0.4 ? '#ffeb3b' : '#1a1a2e' }} />)}
+              </div>
+            </div>
+            <div style={{ width: '30px', height: '40px', background: '#1a1a2e', margin: '0 auto', boxShadow: 'inset 2px 0 0 #252540' }} />
+          </div>
+
+          {/* Building 1 */}
+          <div style={{ width: '50px', height: '100px', background: '#151525', boxShadow: 'inset 2px 0 0 #202035' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 6px)', gap: '4px', padding: '8px' }}>
+              {[...Array(20)].map((_, i) => <div key={i} style={{ width: '6px', height: '6px', background: Math.random() > 0.5 ? '#ffd54f' : '#151525' }} />)}
+            </div>
+          </div>
+
+          {/* One WTC */}
+          <div className="relative" style={{ width: '35px' }}>
+            <div style={{ width: '6px', height: '20px', background: '#1f1f35', margin: '0 auto' }} />
+            <div style={{ width: '30px', height: '180px', background: 'linear-gradient(to bottom, #1f1f35, #151528)', margin: '0 auto', clipPath: 'polygon(10% 0, 90% 0, 100% 100%, 0 100%)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 5px)', gap: '3px', padding: '10px 4px' }}>
+                {[...Array(30)].map((_, i) => <div key={i} style={{ width: '5px', height: '5px', background: Math.random() > 0.45 ? '#4fc3f7' : '#1f1f35' }} />)}
+              </div>
+            </div>
+          </div>
+
+          {/* Building 2 */}
+          <div style={{ width: '60px', height: '80px', background: '#181830', boxShadow: 'inset 3px 0 0 #222240' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 6px)', gap: '4px', padding: '6px' }}>
+              {[...Array(15)].map((_, i) => <div key={i} style={{ width: '6px', height: '6px', background: Math.random() > 0.5 ? '#ffcc02' : '#181830' }} />)}
+            </div>
+          </div>
+
+          {/* Chrysler Building */}
+          <div className="relative" style={{ width: '35px' }}>
+            <div style={{ width: '0', height: '0', borderLeft: '8px solid transparent', borderRight: '8px solid transparent', borderBottom: '25px solid #202038', margin: '0 auto' }} />
+            <div style={{ width: '24px', height: '15px', background: '#202038', margin: '0 auto', borderRadius: '4px 4px 0 0' }} />
+            <div style={{ width: '30px', height: '110px', background: '#1a1a30', margin: '0 auto' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 5px)', gap: '3px', padding: '8px 5px' }}>
+                {[...Array(21)].map((_, i) => <div key={i} style={{ width: '5px', height: '5px', background: Math.random() > 0.45 ? '#fff176' : '#1a1a30' }} />)}
+              </div>
+            </div>
+          </div>
+
+          {/* Building 3 */}
+          <div style={{ width: '45px', height: '130px', background: '#161628', boxShadow: 'inset 2px 0 0 #1f1f38' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 5px)', gap: '4px', padding: '8px 6px' }}>
+              {[...Array(28)].map((_, i) => <div key={i} style={{ width: '5px', height: '5px', background: Math.random() > 0.5 ? '#ffe082' : '#161628' }} />)}
+            </div>
+          </div>
+
+          {/* Building 4 */}
+          <div style={{ width: '55px', height: '90px', background: '#141428', boxShadow: 'inset 2px 0 0 #1c1c38' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 5px)', gap: '4px', padding: '6px' }}>
+              {[...Array(18)].map((_, i) => <div key={i} style={{ width: '5px', height: '5px', background: Math.random() > 0.55 ? '#ffb74d' : '#141428' }} />)}
+            </div>
+          </div>
+
+          {/* Building 5 */}
+          <div style={{ width: '40px', height: '150px', background: '#171730', boxShadow: 'inset 2px 0 0 #202042' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 6px)', gap: '4px', padding: '8px' }}>
+              {[...Array(32)].map((_, i) => <div key={i} style={{ width: '6px', height: '6px', background: Math.random() > 0.5 ? '#81d4fa' : '#171730' }} />)}
+            </div>
+          </div>
+
+          {/* Building 6 */}
+          <div style={{ width: '50px', height: '70px', background: '#151528' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 6px)', gap: '4px', padding: '6px' }}>
+              {[...Array(12)].map((_, i) => <div key={i} style={{ width: '6px', height: '6px', background: Math.random() > 0.5 ? '#fff59d' : '#151528' }} />)}
+            </div>
+          </div>
+        </div>
+
+        {/* Stars */}
+        <div className="absolute top-0 left-0 right-0 h-40 pointer-events-none">
+          {[...Array(30)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute bg-white rounded-full"
+              style={{
+                width: Math.random() > 0.7 ? '3px' : '2px',
+                height: Math.random() > 0.7 ? '3px' : '2px',
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                opacity: 0.4 + Math.random() * 0.6,
+                animation: `twinkle ${2 + Math.random() * 3}s infinite`
+              }}
+            />
+          ))}
+        </div>
+
         {/* Ground */}
-        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-zinc-800 to-zinc-700" />
-        <div className="absolute bottom-20 left-0 right-0 h-1 bg-zinc-600" />
+        <div className="absolute bottom-0 left-0 right-0 h-20" style={{ background: 'linear-gradient(to top, #0a0a12, #151520)', imageRendering: 'pixelated' }} />
+        <div className="absolute bottom-20 left-0 right-0 h-1" style={{ background: '#252530' }} />
 
         {/* Health Bars */}
         <div className="absolute top-4 left-4 right-4 flex justify-between gap-8">
@@ -805,6 +924,7 @@ export default function ChimeFighters() {
         {/* Round End Overlay */}
         {gameState === 'roundEnd' && (
           <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
+            <div className="text-sm text-zinc-500 mb-2">ROUND {round} OF {TOTAL_ROUNDS}</div>
             <div className="text-4xl font-black text-yellow-400 mb-4" style={{ animation: 'glow 0.5s infinite' }}>
               {winner === 'draw' ? '🤝 DRAW! 🤝' : '🏆 K.O.! 🏆'}
             </div>
@@ -822,14 +942,7 @@ export default function ChimeFighters() {
                 </div>
                 {playerName && (
                   <div className="text-sm text-zinc-400">
-                    {submittingScore ? 'Saving to leaderboard...' :
-                     playerRank ? `You're #${playerRank} on the leaderboard!` :
-                     'Score saved!'}
-                  </div>
-                )}
-                {!playerName && (
-                  <div className="text-xs text-zinc-500">
-                    Enter your name in menu to save scores!
+                    {submittingScore ? 'Saving...' : playerRank ? `Rank #${playerRank}` : 'Saved!'}
                   </div>
                 )}
               </div>
@@ -837,15 +950,69 @@ export default function ChimeFighters() {
 
             {gameMode === '1p' && winner === 'prime' && (
               <div className="text-red-400 mb-4">
-                🤖 AI wins this round! No points awarded.
+                🤖 AI wins! No points.
               </div>
             )}
 
             <div className="text-zinc-400 mb-4">
-              Round Score: {optimusScore} - {primeScore}
+              Match: {optimusScore} - {primeScore}
             </div>
             <div className="text-yellow-400 animate-bounce">
-              Press SPACE for next round
+              {round >= TOTAL_ROUNDS ? 'Press SPACE for final results' : `Press SPACE for Round ${round + 1}`}
+            </div>
+          </div>
+        )}
+
+        {/* Game Over Overlay with Leaderboard */}
+        {gameState === 'gameOver' && (
+          <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center overflow-y-auto py-4">
+            <div className="text-5xl font-black text-yellow-400 mb-2" style={{ animation: 'glow 0.5s infinite' }}>
+              🏆 GAME OVER 🏆
+            </div>
+            <div className="text-3xl text-white font-bold mb-4">
+              {optimusScore > primeScore ? 'YOU WIN THE MATCH!' :
+               optimusScore < primeScore ? 'AI WINS THE MATCH!' : 'IT\'S A TIE!'}
+            </div>
+            <div className="text-xl text-zinc-300 mb-6">
+              Final Score: {optimusScore} - {primeScore}
+            </div>
+
+            {/* Leaderboard */}
+            {gameMode === '1p' && (
+              <div className="bg-zinc-900/90 rounded-lg p-4 max-w-md w-full max-h-60 overflow-y-auto mb-4">
+                <h3 className="text-lg font-bold text-center text-purple-400 mb-3">🏆 LEADERBOARD</h3>
+                {leaderboard.length === 0 ? (
+                  <p className="text-zinc-500 text-center">No scores yet!</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-zinc-400 border-b border-zinc-700">
+                        <th className="py-1 text-left">#</th>
+                        <th className="py-1 text-left">Name</th>
+                        <th className="py-1 text-right">Score</th>
+                        <th className="py-1 text-right">Wins</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboard.slice(0, 10).map((entry, i) => (
+                        <tr key={entry.name} className={`border-b border-zinc-800 ${
+                          entry.name.toLowerCase() === playerName.toLowerCase() ? 'bg-purple-900/30 text-purple-300' :
+                          i < 3 ? 'text-yellow-400' : 'text-zinc-300'
+                        }`}>
+                          <td className="py-1">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
+                          <td className="py-1 font-medium">{entry.name}</td>
+                          <td className="py-1 text-right">{entry.score.toLocaleString()}</td>
+                          <td className="py-1 text-right">{entry.wins}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            <div className="text-yellow-400 animate-bounce">
+              Press SPACE to play again
             </div>
           </div>
         )}
