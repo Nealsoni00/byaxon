@@ -78,9 +78,15 @@ export default function AdminPage() {
       });
 
       if (res.ok) {
+        const data = await res.json();
         setShowNew(false);
         setFormData({ subdomain: '', type: 'markdown', content: '', title: '', description: '' });
-        fetchSubdomains();
+        // Use returned list directly instead of refetching
+        if (data.all) {
+          setSubdomains(data.all);
+        } else {
+          fetchSubdomains();
+        }
       } else {
         const data = await res.json();
         alert(data.error || 'Failed to create');

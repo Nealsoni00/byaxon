@@ -10,7 +10,13 @@ export async function getSubdomains(): Promise<SubdomainConfig[]> {
       return [];
     }
 
-    const response = await fetch(blobs[0].url);
+    // Add cache-busting to avoid stale data
+    const url = new URL(blobs[0].url);
+    url.searchParams.set('t', Date.now().toString());
+
+    const response = await fetch(url.toString(), {
+      cache: 'no-store',
+    });
     const data: SubdomainsData = await response.json();
     return data.subdomains || [];
   } catch (error) {

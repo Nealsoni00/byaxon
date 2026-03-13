@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { SubdomainConfig } from '@/types';
-import { getSubdomains, createSubdomain } from '@/lib/storage';
+import { getSubdomains, createSubdomain, saveSubdomains } from '@/lib/storage';
 
 async function isAuthenticated(): Promise<boolean> {
   const cookieStore = await cookies();
@@ -17,7 +17,11 @@ export async function GET() {
 
   try {
     const subdomains = await getSubdomains();
-    return NextResponse.json(subdomains);
+    return NextResponse.json(subdomains, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      },
+    });
   } catch (error) {
     console.error('Error fetching subdomains:', error);
     return NextResponse.json({ error: 'Failed to fetch subdomains' }, { status: 500 });
@@ -60,7 +64,9 @@ export async function POST(request: Request) {
     };
 
     await createSubdomain(newSubdomain);
-    return NextResponse.json(newSubdomain, { status: 201 });
+    // Return all subdomains so frontend can update state immediately
+    const allSubdomains = await getSubdomains();
+    return NextResponse.json({ created: newSubdomain, all: allSubdomains }, { status: 201 });
   } catch (error) {
     console.error('Error creating subdomain:', error);
     const message = error instanceof Error ? error.message : 'Server error';
