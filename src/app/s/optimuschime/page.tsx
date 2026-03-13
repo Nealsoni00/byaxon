@@ -34,6 +34,14 @@ interface Player {
 type GameState = 'menu' | 'fighting' | 'roundEnd' | 'gameOver';
 type GameMode = '1p' | '2p';
 
+interface LeaderboardEntry {
+  name: string;
+  score: number;
+  wins: number;
+  bestScore: number;
+  lastPlayed: string;
+}
+
 const ATTACKS = {
   punch: { damage: 8, range: 80, cooldown: 15, knockback: 5 },
   kick: { damage: 12, range: 100, cooldown: 25, knockback: 10 },
@@ -50,6 +58,15 @@ export default function ChimeFighters() {
   const [round, setRound] = useState(1);
   const [winner, setWinner] = useState<'optimus' | 'prime' | 'draw' | null>(null);
   const [hitEffects, setHitEffects] = useState<{ x: number; y: number; text: string; id: number; attacker: 'optimus' | 'prime' }[]>([]);
+
+  // Leaderboard state
+  const [playerName, setPlayerName] = useState('');
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [lastScore, setLastScore] = useState(0);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [submittingScore, setSubmittingScore] = useState(false);
+  const [playerRank, setPlayerRank] = useState<number | null>(null);
+  const totalDamageDealt = useRef(0);
 
   const keysPressed = useRef<Set<string>>(new Set());
   const effectId = useRef(0);
@@ -81,6 +98,9 @@ export default function ChimeFighters() {
     resetPlayers();
     setTimeLeft(ROUND_TIME);
     setWinner(null);
+    setLastScore(0);
+    setPlayerRank(null);
+    totalDamageDealt.current = 0;
     setGameState('fighting');
   }, [resetPlayers]);
 
@@ -91,6 +111,66 @@ export default function ChimeFighters() {
       setHitEffects(prev => prev.filter(e => e.id !== id));
     }, 500);
   }, []);
+
+  // Fetch leaderboard on load
+  useEffect(() => {
+    fetch('/api/leaderboard')
+      .then(res => res.json())
+      .then(data => setLeaderboard(Array.isArray(data) ? data : []))
+      .catch(() => setLeaderboard([]));
+  }, []);
+
+  // Calculate score based on performance
+  const calculateScore = useCallback((healthRemaining: number, timeRemaining: number, damageDealt: number) => {
+    let score = 0;
+
+    // Base win bonus
+    score += 100;
+
+    // Health bonus (1 point per HP remaining)
+    score += healthRemaining;
+
+    // Time bonus (2 points per second remaining)
+    score += timeRemaining * 2;
+
+    // Damage dealt bonus (0.5 points per damage)
+    score += Math.floor(damageDealt * 0.5);
+
+    // Perfect win bonus (no damage taken)
+    if (healthRemaining === 100) {
+      score += 50;
+    }
+
+    // Quick win bonus (under 30 seconds)
+    if (timeRemaining > 30) {
+      score += 25;
+    }
+
+    return score;
+  }, []);
+
+  // Submit score to leaderboard
+  const submitScore = useCallback(async (score: number) => {
+    if (!playerName.trim() || gameMode !== '1p') return;
+
+    setSubmittingScore(true);
+    try {
+      const res = await fetch('/api/leaderboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: playerName, score }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setLeaderboard(data.leaderboard || []);
+        setPlayerRank(data.playerRank || null);
+      }
+    } catch (error) {
+      console.error('Failed to submit score:', error);
+    }
+    setSubmittingScore(false);
+  }, [playerName, gameMode]);
 
   // Keyboard handling
   useEffect(() => {
@@ -135,11 +215,19 @@ export default function ChimeFighters() {
           if (p1.health > p2.health) {
             setWinner('optimus');
             setOptimusScore(s => s + 1);
+            // Calculate score for time-based win (0 time remaining)
+            const score = calculateScore(p1.health, 0, totalDamageDealt.current);
+            setLastScore(score);
+            if (gameMode === '1p' && playerName.trim()) {
+              submitScore(score);
+            }
           } else if (p2.health > p1.health) {
             setWinner('prime');
             setPrimeScore(s => s + 1);
+            setLastScore(0);
           } else {
             setWinner('draw');
+            setLastScore(0);
           }
           setGameState('roundEnd');
           return 0;
@@ -149,7 +237,7 @@ export default function ChimeFighters() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [gameState, p1.health, p2.health]);
+  }, [gameState, p1.health, p2.health, gameMode, playerName, calculateScore, submitScore]);
 
   // Game loop - uses refs for all game logic to avoid React state batching issues
   useEffect(() => {
@@ -293,6 +381,7 @@ export default function ChimeFighters() {
           p1.combo++;
           p1.specialCharge = Math.min(100, p1.specialCharge + 10);
           p1.isAttacking = false; p1.attackType = 'none'; // Prevent multi-hit
+          totalDamageDealt.current += damage; // Track damage for scoring
 
           const texts = ['POW!', 'BAM!', 'WHAM!', 'CRASH!', 'BOOM!'];
           addHitEffect((p1.x + p2.x) / 2, p2.y - 50,
@@ -327,10 +416,17 @@ export default function ChimeFighters() {
       if (p1.health <= 0) {
         setWinner('prime');
         setPrimeScore(s => s + 1);
+        setLastScore(0); // No score for losing
         setGameState('roundEnd');
       } else if (p2.health <= 0) {
         setWinner('optimus');
         setOptimusScore(s => s + 1);
+        // Calculate and set score for winning
+        const score = calculateScore(p1.health, timeLeft, totalDamageDealt.current);
+        setLastScore(score);
+        if (gameMode === '1p' && playerName.trim()) {
+          submitScore(score);
+        }
         setGameState('roundEnd');
       }
 
@@ -341,7 +437,7 @@ export default function ChimeFighters() {
     }, 1000 / 60);
 
     return () => clearInterval(gameLoop);
-  }, [gameState, gameMode, addHitEffect]);
+  }, [gameState, gameMode, addHitEffect, timeLeft, calculateScore, submitScore, playerName]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -546,27 +642,27 @@ export default function ChimeFighters() {
 
         {/* Menu Overlay */}
         {gameState === 'menu' && (
-          <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
-            <h2 className="text-5xl font-black text-white mb-4" style={{ textShadow: '0 0 30px #ff6b6b' }}>
+          <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center overflow-y-auto py-4">
+            <h2 className="text-5xl font-black text-white mb-2" style={{ textShadow: '0 0 30px #ff6b6b' }}>
               CHIME FIGHTERS
             </h2>
-            <p className="text-zinc-400 mb-4">Our Fearless Leader & CEO Battle</p>
+            <p className="text-zinc-400 mb-3">Our Fearless Leader & CEO Battle</p>
 
             {/* Mode Selection */}
-            <div className="flex gap-4 mb-6">
+            <div className="flex gap-4 mb-4">
               <button
-                onClick={() => setGameMode('1p')}
-                className={`px-6 py-3 rounded-lg font-bold text-lg transition-all ${
+                onClick={() => { setGameMode('1p'); setShowLeaderboard(false); }}
+                className={`px-6 py-2 rounded-lg font-bold transition-all ${
                   gameMode === '1p'
                     ? 'bg-red-600 text-white shadow-lg shadow-red-500/50'
                     : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
                 }`}
               >
-                1 PLAYER vs AI
+                1P vs AI
               </button>
               <button
-                onClick={() => setGameMode('2p')}
-                className={`px-6 py-3 rounded-lg font-bold text-lg transition-all ${
+                onClick={() => { setGameMode('2p'); setShowLeaderboard(false); }}
+                className={`px-6 py-2 rounded-lg font-bold transition-all ${
                   gameMode === '2p'
                     ? 'bg-yellow-600 text-white shadow-lg shadow-yellow-500/50'
                     : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
@@ -574,40 +670,101 @@ export default function ChimeFighters() {
               >
                 2 PLAYERS
               </button>
+              <button
+                onClick={() => setShowLeaderboard(!showLeaderboard)}
+                className={`px-6 py-2 rounded-lg font-bold transition-all ${
+                  showLeaderboard
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50'
+                    : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                }`}
+              >
+                🏆 LEADERBOARD
+              </button>
             </div>
 
-            <div className="text-yellow-400 text-2xl font-bold animate-bounce mb-6">
-              Press SPACE or F to Start!
-            </div>
-
-            {gameMode === '1p' ? (
-              <div className="text-center text-sm text-zinc-300">
-                <div className="text-red-400 font-bold mb-2">YOUR CONTROLS (OPTIMUS)</div>
-                <div>W - Jump | A/D - Move</div>
-                <div>G - Punch | H - Kick | J - Special</div>
-                <div className="mt-4 text-yellow-400 font-bold">
-                  🤖 Prime Chime is controlled by AI
-                </div>
+            {showLeaderboard ? (
+              <div className="bg-zinc-900/90 rounded-lg p-4 max-w-md w-full max-h-80 overflow-y-auto">
+                <h3 className="text-xl font-bold text-center text-purple-400 mb-3">🏆 TOP PRIME CHIME SLAYERS</h3>
+                {leaderboard.length === 0 ? (
+                  <p className="text-zinc-500 text-center">No scores yet. Be the first!</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-zinc-400 border-b border-zinc-700">
+                        <th className="py-1 text-left">#</th>
+                        <th className="py-1 text-left">Name</th>
+                        <th className="py-1 text-right">Score</th>
+                        <th className="py-1 text-right">Wins</th>
+                        <th className="py-1 text-right">Best</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboard.map((entry, i) => (
+                        <tr key={entry.name} className={`border-b border-zinc-800 ${i < 3 ? 'text-yellow-400' : 'text-zinc-300'}`}>
+                          <td className="py-1">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
+                          <td className="py-1 font-medium">{entry.name}</td>
+                          <td className="py-1 text-right">{entry.score.toLocaleString()}</td>
+                          <td className="py-1 text-right">{entry.wins}</td>
+                          <td className="py-1 text-right">{entry.bestScore}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-8 text-sm text-zinc-300">
-                <div>
-                  <div className="text-red-400 font-bold mb-2">PLAYER 1 (OPTIMUS)</div>
-                  <div>W - Jump</div>
-                  <div>A/D - Move</div>
-                  <div>G - Punch</div>
-                  <div>H - Kick</div>
-                  <div>J - Special (when full)</div>
+              <>
+                {/* Name Input for 1P mode */}
+                {gameMode === '1p' && (
+                  <div className="mb-4">
+                    <input
+                      type="text"
+                      placeholder="Enter your name for leaderboard"
+                      value={playerName}
+                      onChange={(e) => setPlayerName(e.target.value.slice(0, 20))}
+                      className="px-4 py-2 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-center w-64 focus:outline-none focus:border-purple-500"
+                      maxLength={20}
+                    />
+                  </div>
+                )}
+
+                <div className="text-yellow-400 text-xl font-bold animate-bounce mb-4">
+                  Press SPACE or F to Start!
                 </div>
-                <div>
-                  <div className="text-yellow-400 font-bold mb-2">PLAYER 2 (PRIME)</div>
-                  <div>↑ - Jump</div>
-                  <div>←/→ - Move</div>
-                  <div>, or 1 - Punch</div>
-                  <div>. or 2 - Kick</div>
-                  <div>/ or 3 - Special (when full)</div>
-                </div>
-              </div>
+
+                {gameMode === '1p' ? (
+                  <div className="text-center text-sm text-zinc-300">
+                    <div className="text-red-400 font-bold mb-2">YOUR CONTROLS (OPTIMUS)</div>
+                    <div>W - Jump | A/D - Move</div>
+                    <div>G - Punch | H - Kick | J - Special</div>
+                    <div className="mt-3 text-yellow-400 font-bold">
+                      🤖 Prime Chime is controlled by AI
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-500">
+                      Score = 100 + HP remaining + (Time × 2) + Damage bonus
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-8 text-sm text-zinc-300">
+                    <div>
+                      <div className="text-red-400 font-bold mb-2">PLAYER 1 (OPTIMUS)</div>
+                      <div>W - Jump</div>
+                      <div>A/D - Move</div>
+                      <div>G - Punch</div>
+                      <div>H - Kick</div>
+                      <div>J - Special (when full)</div>
+                    </div>
+                    <div>
+                      <div className="text-yellow-400 font-bold mb-2">PLAYER 2 (PRIME)</div>
+                      <div>↑ - Jump</div>
+                      <div>←/→ - Move</div>
+                      <div>, or 1 - Punch</div>
+                      <div>. or 2 - Kick</div>
+                      <div>/ or 3 - Special (when full)</div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -619,12 +776,40 @@ export default function ChimeFighters() {
               {winner === 'draw' ? '🤝 DRAW! 🤝' : '🏆 K.O.! 🏆'}
             </div>
             {winner !== 'draw' && (
-              <div className="text-3xl text-white font-bold mb-4">
+              <div className="text-3xl text-white font-bold mb-2">
                 {winner === 'optimus' ? 'OPTIMUS CHIME' : 'PRIME CHIME'} WINS!
               </div>
             )}
-            <div className="text-zinc-400 mb-8">
-              Score: {optimusScore} - {primeScore}
+
+            {/* Score display for 1P mode */}
+            {gameMode === '1p' && winner === 'optimus' && lastScore > 0 && (
+              <div className="bg-zinc-900/80 rounded-lg p-4 mb-4 text-center">
+                <div className="text-2xl font-bold text-green-400 mb-1">
+                  +{lastScore} POINTS!
+                </div>
+                {playerName && (
+                  <div className="text-sm text-zinc-400">
+                    {submittingScore ? 'Saving to leaderboard...' :
+                     playerRank ? `You're #${playerRank} on the leaderboard!` :
+                     'Score saved!'}
+                  </div>
+                )}
+                {!playerName && (
+                  <div className="text-xs text-zinc-500">
+                    Enter your name in menu to save scores!
+                  </div>
+                )}
+              </div>
+            )}
+
+            {gameMode === '1p' && winner === 'prime' && (
+              <div className="text-red-400 mb-4">
+                🤖 AI wins this round! No points awarded.
+              </div>
+            )}
+
+            <div className="text-zinc-400 mb-4">
+              Round Score: {optimusScore} - {primeScore}
             </div>
             <div className="text-yellow-400 animate-bounce">
               Press SPACE for next round
