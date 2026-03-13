@@ -54,6 +54,7 @@ export default function ChimeFighters() {
   const keysPressed = useRef<Set<string>>(new Set());
   const effectId = useRef(0);
   const aiDecisionTimer = useRef(0);
+  const p1Ref = useRef({ x: 200, y: GROUND_Y }); // Track P1 position for AI
 
   const [p1, setP1] = useState<Player>({
     x: 200, y: GROUND_Y, vx: 0, vy: 0, health: 100,
@@ -235,6 +236,9 @@ export default function ChimeFighters() {
           p.attackType = 'none';
         }
 
+        // Update ref for AI to read
+        p1Ref.current = { x: p.x, y: p.y };
+
         return p;
       });
 
@@ -292,60 +296,57 @@ export default function ChimeFighters() {
             // AI Controls for single player mode
             aiDecisionTimer.current++;
 
-            // Get P1 position for AI decisions
-            setP1(currentP1 => {
-              const distance = Math.abs(currentP1.x - p.x);
-              const playerIsLeft = currentP1.x < p.x;
+            // Get P1 position from ref
+            const p1Pos = p1Ref.current;
+            const distance = Math.abs(p1Pos.x - p.x);
+            const playerIsLeft = p1Pos.x < p.x;
 
-              // AI decision making (every few frames for more natural feel)
-              if (aiDecisionTimer.current % 8 === 0) {
-                // Face the player
-                p.facing = playerIsLeft ? 'left' : 'right';
+            // AI decision making (every few frames for more natural feel)
+            if (aiDecisionTimer.current % 8 === 0) {
+              // Face the player
+              p.facing = playerIsLeft ? 'left' : 'right';
 
-                // Move towards player if too far, back away if too close
-                if (distance > 200) {
-                  p.vx = playerIsLeft ? -MOVE_SPEED * 0.8 : MOVE_SPEED * 0.8;
-                } else if (distance < 80) {
-                  // Back away or jump
-                  if (Math.random() > 0.5 && !p.isJumping) {
-                    p.vy = JUMP_FORCE;
-                    p.isJumping = true;
-                  } else {
-                    p.vx = playerIsLeft ? MOVE_SPEED * 0.6 : -MOVE_SPEED * 0.6;
-                  }
-                } else {
-                  p.vx *= 0.8;
-                }
-
-                // Attack when in range
-                if (distance < 120 && p.attackCooldown <= 0) {
-                  const rand = Math.random();
-                  if (p.specialCharge >= 100 && rand > 0.7) {
-                    p.isAttacking = true;
-                    p.attackType = 'special';
-                    p.specialCharge = 0;
-                  } else if (rand > 0.5) {
-                    p.isAttacking = true;
-                    p.attackType = 'kick';
-                    p.attackCooldown = ATTACKS.kick.cooldown;
-                  } else if (rand > 0.2) {
-                    p.isAttacking = true;
-                    p.attackType = 'punch';
-                    p.attackCooldown = ATTACKS.punch.cooldown;
-                  }
-                }
-
-                // Occasional random jumps for variety
-                if (Math.random() > 0.95 && !p.isJumping) {
+              // Move towards player if too far, back away if too close
+              if (distance > 200) {
+                p.vx = playerIsLeft ? -MOVE_SPEED * 0.8 : MOVE_SPEED * 0.8;
+              } else if (distance < 80) {
+                // Back away or jump
+                if (Math.random() > 0.5 && !p.isJumping) {
                   p.vy = JUMP_FORCE;
                   p.isJumping = true;
+                } else {
+                  p.vx = playerIsLeft ? MOVE_SPEED * 0.6 : -MOVE_SPEED * 0.6;
                 }
               } else {
-                p.vx *= 0.95;
+                p.vx *= 0.8;
               }
 
-              return currentP1;
-            });
+              // Attack when in range
+              if (distance < 120 && p.attackCooldown <= 0) {
+                const rand = Math.random();
+                if (p.specialCharge >= 100 && rand > 0.7) {
+                  p.isAttacking = true;
+                  p.attackType = 'special';
+                  p.specialCharge = 0;
+                } else if (rand > 0.5) {
+                  p.isAttacking = true;
+                  p.attackType = 'kick';
+                  p.attackCooldown = ATTACKS.kick.cooldown;
+                } else if (rand > 0.2) {
+                  p.isAttacking = true;
+                  p.attackType = 'punch';
+                  p.attackCooldown = ATTACKS.punch.cooldown;
+                }
+              }
+
+              // Occasional random jumps for variety
+              if (Math.random() > 0.95 && !p.isJumping) {
+                p.vy = JUMP_FORCE;
+                p.isJumping = true;
+              }
+            } else {
+              p.vx *= 0.95;
+            }
           }
         } else {
           p.vx *= 0.8;
