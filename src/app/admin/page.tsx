@@ -372,11 +372,11 @@ export default function AdminPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-start justify-between">
-                        <div>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-3 mb-1">
                             <span className="font-medium">{sub.subdomain}.byaxon.com</span>
-                            <span className={`text-xs px-2 py-0.5 rounded ${
+                            <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
                               sub.type === 'redirect' ? 'bg-blue-900 text-blue-300' :
                               sub.type === 'markdown' ? 'bg-green-900 text-green-300' :
                               sub.type === 'iframe' ? 'bg-orange-900 text-orange-300' :
@@ -385,17 +385,17 @@ export default function AdminPage() {
                               {sub.type}
                             </span>
                           </div>
-                          <div className="text-sm text-zinc-400">
+                          <div className="text-sm text-zinc-400 truncate">
                             {sub.type === 'redirect' ? (
-                              <span>→ {sub.content}</span>
+                              <span title={sub.content}>→ {sub.content}</span>
                             ) : sub.type === 'iframe' ? (
-                              <span>⧉ {sub.content}</span>
+                              <span title={sub.content}>⧉ {sub.content}</span>
                             ) : (
                               <span>{sub.title || 'Untitled'}</span>
                             )}
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-shrink-0">
                           <button
                             onClick={() => startEdit(sub)}
                             className="text-zinc-400 hover:text-white text-sm transition"
