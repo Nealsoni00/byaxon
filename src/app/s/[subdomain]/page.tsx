@@ -1,21 +1,7 @@
 import { redirect, notFound } from 'next/navigation';
-import fs from 'fs/promises';
-import path from 'path';
-import { SubdomainsData } from '@/types';
 import { Metadata } from 'next';
+import { getSubdomain } from '@/lib/storage';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
-
-const DATA_FILE = path.join(process.cwd(), 'data', 'subdomains.json');
-
-async function getSubdomain(subdomain: string) {
-  try {
-    const data = await fs.readFile(DATA_FILE, 'utf-8');
-    const parsed: SubdomainsData = JSON.parse(data);
-    return parsed.subdomains.find((s) => s.subdomain === subdomain);
-  } catch {
-    return null;
-  }
-}
 
 export async function generateMetadata({
   params,
