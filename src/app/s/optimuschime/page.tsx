@@ -1,453 +1,754 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 const OPTIMUS_IMG = 'https://igaqhhu6xiolnmsh.public.blob.vercel-storage.com/images/1773363194597-optimuschime.png';
 const PRIME_IMG = 'https://igaqhhu6xiolnmsh.public.blob.vercel-storage.com/images/1773407964880-prime-chime.png';
 
-type GameState = 'idle' | 'fighting' | 'victory';
-type PowerUp = 'none' | 'fire' | 'lightning' | 'shield' | 'mega';
+const GAME_WIDTH = 1200;
+const GAME_HEIGHT = 600;
+const GROUND_Y = 480;
+const PLAYER_SIZE = 100;
+const GRAVITY = 0.8;
+const JUMP_FORCE = -18;
+const MOVE_SPEED = 8;
+const ROUND_TIME = 60;
 
-const POWER_UPS: { name: PowerUp; color: string; emoji: string }[] = [
-  { name: 'fire', color: '#ff4444', emoji: '🔥' },
-  { name: 'lightning', color: '#ffff00', emoji: '⚡' },
-  { name: 'shield', color: '#4444ff', emoji: '🛡️' },
-  { name: 'mega', color: '#ff00ff', emoji: '💥' },
-];
+interface Player {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  health: number;
+  facing: 'left' | 'right';
+  isJumping: boolean;
+  isAttacking: boolean;
+  attackType: 'none' | 'punch' | 'kick' | 'special';
+  attackCooldown: number;
+  specialCooldown: number;
+  specialCharge: number;
+  stunned: number;
+  combo: number;
+}
 
-const ATTACK_MESSAGES = [
-  'BOOM!', 'POW!', 'WHAM!', 'CRASH!', 'ZAP!', 'SLAM!',
-  'KABOOM!', 'SMASH!', 'THWACK!', 'CRUNCH!'
-];
+type GameState = 'menu' | 'fighting' | 'roundEnd' | 'gameOver';
+type GameMode = '1p' | '2p';
 
-export default function OptimusChimePage() {
-  const [gameState, setGameState] = useState<GameState>('idle');
-  const [optimusHealth, setOptimusHealth] = useState(100);
-  const [primeHealth, setPrimeHealth] = useState(100);
-  const [optimusPower, setOptimusPower] = useState<PowerUp>('none');
-  const [primePower, setPrimePower] = useState<PowerUp>('none');
-  const [winner, setWinner] = useState<'optimus' | 'prime' | null>(null);
-  const [attackMessage, setAttackMessage] = useState('');
+const ATTACKS = {
+  punch: { damage: 8, range: 80, cooldown: 15, knockback: 5 },
+  kick: { damage: 12, range: 100, cooldown: 25, knockback: 10 },
+  special: { damage: 25, range: 150, cooldown: 0, knockback: 20 },
+};
+
+export default function ChimeFighters() {
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [gameState, setGameState] = useState<GameState>('menu');
+  const [gameMode, setGameMode] = useState<GameMode>('1p');
+  const [timeLeft, setTimeLeft] = useState(ROUND_TIME);
   const [optimusScore, setOptimusScore] = useState(0);
   const [primeScore, setPrimeScore] = useState(0);
-  const [showPrompt, setShowPrompt] = useState(true);
-  const [shakeLeft, setShakeLeft] = useState(false);
-  const [shakeRight, setShakeRight] = useState(false);
-  const [combo, setCombo] = useState(0);
+  const [round, setRound] = useState(1);
+  const [winner, setWinner] = useState<'optimus' | 'prime' | 'draw' | null>(null);
+  const [hitEffects, setHitEffects] = useState<{ x: number; y: number; text: string; id: number }[]>([]);
 
-  const resetGame = useCallback(() => {
-    setOptimusHealth(100);
-    setPrimeHealth(100);
-    setOptimusPower('none');
-    setPrimePower('none');
+  const keysPressed = useRef<Set<string>>(new Set());
+  const effectId = useRef(0);
+  const aiDecisionTimer = useRef(0);
+
+  const [p1, setP1] = useState<Player>({
+    x: 200, y: GROUND_Y, vx: 0, vy: 0, health: 100,
+    facing: 'right', isJumping: false, isAttacking: false,
+    attackType: 'none', attackCooldown: 0, specialCooldown: 0,
+    specialCharge: 0, stunned: 0, combo: 0
+  });
+
+  const [p2, setP2] = useState<Player>({
+    x: 900, y: GROUND_Y, vx: 0, vy: 0, health: 100,
+    facing: 'left', isJumping: false, isAttacking: false,
+    attackType: 'none', attackCooldown: 0, specialCooldown: 0,
+    specialCharge: 0, stunned: 0, combo: 0
+  });
+
+  const resetPlayers = useCallback(() => {
+    setP1({
+      x: 200, y: GROUND_Y, vx: 0, vy: 0, health: 100,
+      facing: 'right', isJumping: false, isAttacking: false,
+      attackType: 'none', attackCooldown: 0, specialCooldown: 0,
+      specialCharge: 0, stunned: 0, combo: 0
+    });
+    setP2({
+      x: 900, y: GROUND_Y, vx: 0, vy: 0, health: 100,
+      facing: 'left', isJumping: false, isAttacking: false,
+      attackType: 'none', attackCooldown: 0, specialCooldown: 0,
+      specialCharge: 0, stunned: 0, combo: 0
+    });
+  }, []);
+
+  const startGame = useCallback(() => {
+    resetPlayers();
+    setTimeLeft(ROUND_TIME);
     setWinner(null);
-    setAttackMessage('');
-    setGameState('idle');
-    setCombo(0);
-  }, []);
-
-  const startFight = useCallback(() => {
-    if (gameState !== 'idle') return;
     setGameState('fighting');
-    setShowPrompt(false);
-  }, [gameState]);
+  }, [resetPlayers]);
 
-  // Auto-start fight after a delay if idle
-  useEffect(() => {
-    if (gameState === 'idle') {
-      const autoStart = setTimeout(() => {
-        startFight();
-      }, 5000);
-      return () => clearTimeout(autoStart);
-    }
-  }, [gameState, startFight]);
-
-  // Fight logic
-  useEffect(() => {
-    if (gameState !== 'fighting') return;
-
-    const fightInterval = setInterval(() => {
-      const attacker = Math.random() > 0.5 ? 'optimus' : 'prime';
-      let damage = Math.floor(Math.random() * 15) + 5;
-
-      // Power-up effects
-      const activePower = attacker === 'optimus' ? optimusPower : primePower;
-      if (activePower === 'mega') damage *= 2;
-      if (activePower === 'fire') damage += 10;
-      if (activePower === 'lightning') damage += 5;
-
-      // Shield reduces damage
-      const defenderPower = attacker === 'optimus' ? primePower : optimusPower;
-      if (defenderPower === 'shield') damage = Math.floor(damage * 0.5);
-
-      // Apply damage
-      if (attacker === 'optimus') {
-        setPrimeHealth(h => Math.max(0, h - damage));
-        setShakeRight(true);
-        setTimeout(() => setShakeRight(false), 200);
-      } else {
-        setOptimusHealth(h => Math.max(0, h - damage));
-        setShakeLeft(true);
-        setTimeout(() => setShakeLeft(false), 200);
-      }
-
-      // Show attack message
-      const msg = ATTACK_MESSAGES[Math.floor(Math.random() * ATTACK_MESSAGES.length)];
-      setAttackMessage(`${msg} -${damage}`);
-      setCombo(c => c + 1);
-
-      // Random power-up spawn
-      if (Math.random() < 0.15) {
-        const powerUp = POWER_UPS[Math.floor(Math.random() * POWER_UPS.length)];
-        if (Math.random() > 0.5) {
-          setOptimusPower(powerUp.name);
-          setTimeout(() => setOptimusPower('none'), 3000);
-        } else {
-          setPrimePower(powerUp.name);
-          setTimeout(() => setPrimePower('none'), 3000);
-        }
-      }
-
-      // Create hit effect
-      createHitEffect(attacker === 'optimus' ? 'right' : 'left');
-
-    }, 400);
-
-    return () => clearInterval(fightInterval);
-  }, [gameState, optimusPower, primePower]);
-
-  // Check for winner
-  useEffect(() => {
-    if (gameState !== 'fighting') return;
-
-    if (optimusHealth <= 0) {
-      setWinner('prime');
-      setPrimeScore(s => s + 1);
-      setGameState('victory');
-    } else if (primeHealth <= 0) {
-      setWinner('optimus');
-      setOptimusScore(s => s + 1);
-      setGameState('victory');
-    }
-  }, [optimusHealth, primeHealth, gameState]);
-
-  // Auto-restart after victory
-  useEffect(() => {
-    if (gameState === 'victory') {
-      const restart = setTimeout(resetGame, 4000);
-      return () => clearTimeout(restart);
-    }
-  }, [gameState, resetGame]);
-
-  // Keyboard handler
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'f') {
-        if (gameState === 'idle') startFight();
-        else if (gameState === 'victory') resetGame();
-      }
-      // Click to boost your fighter
-      if (gameState === 'fighting') {
-        if (e.key === '1' || e.key === 'a') {
-          setOptimusPower('mega');
-          setTimeout(() => setOptimusPower('none'), 2000);
-        }
-        if (e.key === '2' || e.key === 'l') {
-          setPrimePower('mega');
-          setTimeout(() => setPrimePower('none'), 2000);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [gameState, startFight, resetGame]);
-
-  const createHitEffect = (side: 'left' | 'right') => {
-    const effect = document.createElement('div');
-    effect.textContent = ATTACK_MESSAGES[Math.floor(Math.random() * ATTACK_MESSAGES.length)];
-    effect.style.cssText = `
-      position: fixed;
-      top: ${40 + Math.random() * 20}%;
-      ${side}: ${30 + Math.random() * 10}%;
-      font-size: 3rem;
-      font-weight: bold;
-      color: #ff0;
-      text-shadow: 0 0 20px #f00, 0 0 40px #f00;
-      pointer-events: none;
-      z-index: 1000;
-      animation: hitPop 0.5s ease-out forwards;
-    `;
-    document.body.appendChild(effect);
-    setTimeout(() => effect.remove(), 500);
-  };
-
-  // Floating chimes background
-  useEffect(() => {
-    const images = [OPTIMUS_IMG, PRIME_IMG];
-
-    function createFloatingChime() {
-      const img = document.createElement('img');
-      img.src = images[Math.floor(Math.random() * images.length)];
-      img.style.cssText = `
-        position: fixed;
-        pointer-events: none;
-        opacity: 0.4;
-        width: ${20 + Math.random() * 40}px;
-        left: ${Math.random() * window.innerWidth}px;
-        top: ${window.innerHeight + 50}px;
-        z-index: 1;
-      `;
-      const duration = 6 + Math.random() * 4;
-      const rotation = (Math.random() - 0.5) * 720;
-      img.animate([
-        { transform: 'translateY(0) rotate(0deg)', opacity: 0.4 },
-        { transform: `translateY(-${window.innerHeight + 100}px) rotate(${rotation}deg)`, opacity: 0 }
-      ], { duration: duration * 1000, easing: 'linear' }).onfinish = () => img.remove();
-      document.body.appendChild(img);
-    }
-
-    const interval = setInterval(createFloatingChime, 1000);
-    return () => clearInterval(interval);
+  const addHitEffect = useCallback((x: number, y: number, text: string) => {
+    const id = effectId.current++;
+    setHitEffects(prev => [...prev, { x, y, text, id }]);
+    setTimeout(() => {
+      setHitEffects(prev => prev.filter(e => e.id !== id));
+    }, 500);
   }, []);
 
-  const getPowerUpStyle = (power: PowerUp) => {
-    const p = POWER_UPS.find(pu => pu.name === power);
-    if (!p) return {};
-    return {
-      boxShadow: `0 0 30px ${p.color}, 0 0 60px ${p.color}`,
-      filter: `drop-shadow(0 0 20px ${p.color})`
+  // Keyboard handling
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      keysPressed.current.add(e.key.toLowerCase());
+
+      if (gameState === 'menu' && (e.key === ' ' || e.key.toLowerCase() === 'f')) {
+        startGame();
+      }
+      if ((gameState === 'roundEnd' || gameState === 'gameOver') && e.key === ' ') {
+        if (gameState === 'gameOver') {
+          setOptimusScore(0);
+          setPrimeScore(0);
+          setRound(1);
+        } else {
+          setRound(r => r + 1);
+        }
+        startGame();
+      }
     };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      keysPressed.current.delete(e.key.toLowerCase());
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [gameState, startGame]);
+
+  // Timer
+  useEffect(() => {
+    if (gameState !== 'fighting') return;
+
+    const timer = setInterval(() => {
+      setTimeLeft(t => {
+        if (t <= 1) {
+          // Time's up - determine winner by health
+          if (p1.health > p2.health) {
+            setWinner('optimus');
+            setOptimusScore(s => s + 1);
+          } else if (p2.health > p1.health) {
+            setWinner('prime');
+            setPrimeScore(s => s + 1);
+          } else {
+            setWinner('draw');
+          }
+          setGameState('roundEnd');
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [gameState, p1.health, p2.health]);
+
+  // Game loop
+  useEffect(() => {
+    if (gameState !== 'fighting') return;
+
+    const gameLoop = setInterval(() => {
+      setP1(prev => {
+        const p = { ...prev };
+        const keys = keysPressed.current;
+
+        // Reduce cooldowns
+        if (p.attackCooldown > 0) p.attackCooldown--;
+        if (p.specialCooldown > 0) p.specialCooldown--;
+        if (p.stunned > 0) {
+          p.stunned--;
+          p.vx *= 0.9;
+        }
+
+        // Build special charge
+        if (p.specialCharge < 100) p.specialCharge += 0.2;
+
+        if (p.stunned <= 0) {
+          // Movement - WASD
+          if (keys.has('a')) {
+            p.vx = -MOVE_SPEED;
+            p.facing = 'left';
+          } else if (keys.has('d')) {
+            p.vx = MOVE_SPEED;
+            p.facing = 'right';
+          } else {
+            p.vx *= 0.8;
+          }
+
+          // Jump - W
+          if (keys.has('w') && !p.isJumping) {
+            p.vy = JUMP_FORCE;
+            p.isJumping = true;
+          }
+
+          // Attacks
+          if (p.attackCooldown <= 0) {
+            if (keys.has('g')) { // Punch
+              p.isAttacking = true;
+              p.attackType = 'punch';
+              p.attackCooldown = ATTACKS.punch.cooldown;
+            } else if (keys.has('h')) { // Kick
+              p.isAttacking = true;
+              p.attackType = 'kick';
+              p.attackCooldown = ATTACKS.kick.cooldown;
+            } else if (keys.has('j') && p.specialCharge >= 100) { // Special
+              p.isAttacking = true;
+              p.attackType = 'special';
+              p.specialCharge = 0;
+            }
+          }
+        }
+
+        // Physics
+        p.vy += GRAVITY;
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // Ground collision
+        if (p.y >= GROUND_Y) {
+          p.y = GROUND_Y;
+          p.vy = 0;
+          p.isJumping = false;
+        }
+
+        // Boundaries
+        p.x = Math.max(50, Math.min(GAME_WIDTH - 50, p.x));
+
+        // Reset attack state
+        if (p.attackCooldown <= ATTACKS[p.attackType === 'none' ? 'punch' : p.attackType].cooldown - 5) {
+          p.isAttacking = false;
+          p.attackType = 'none';
+        }
+
+        return p;
+      });
+
+      setP2(prev => {
+        const p = { ...prev };
+        const keys = keysPressed.current;
+
+        // Reduce cooldowns
+        if (p.attackCooldown > 0) p.attackCooldown--;
+        if (p.specialCooldown > 0) p.specialCooldown--;
+        if (p.stunned > 0) {
+          p.stunned--;
+          p.vx *= 0.9;
+        }
+
+        // Build special charge
+        if (p.specialCharge < 100) p.specialCharge += 0.2;
+
+        if (p.stunned <= 0) {
+          if (gameMode === '2p') {
+            // Player 2 controls - Arrow keys
+            if (keys.has('arrowleft')) {
+              p.vx = -MOVE_SPEED;
+              p.facing = 'left';
+            } else if (keys.has('arrowright')) {
+              p.vx = MOVE_SPEED;
+              p.facing = 'right';
+            } else {
+              p.vx *= 0.8;
+            }
+
+            // Jump - Up arrow
+            if (keys.has('arrowup') && !p.isJumping) {
+              p.vy = JUMP_FORCE;
+              p.isJumping = true;
+            }
+
+            // Attacks
+            if (p.attackCooldown <= 0) {
+              if (keys.has(',') || keys.has('1')) { // Punch
+                p.isAttacking = true;
+                p.attackType = 'punch';
+                p.attackCooldown = ATTACKS.punch.cooldown;
+              } else if (keys.has('.') || keys.has('2')) { // Kick
+                p.isAttacking = true;
+                p.attackType = 'kick';
+                p.attackCooldown = ATTACKS.kick.cooldown;
+              } else if ((keys.has('/') || keys.has('3')) && p.specialCharge >= 100) { // Special
+                p.isAttacking = true;
+                p.attackType = 'special';
+                p.specialCharge = 0;
+              }
+            }
+          } else {
+            // AI Controls for single player mode
+            aiDecisionTimer.current++;
+
+            // Get P1 position for AI decisions
+            setP1(currentP1 => {
+              const distance = Math.abs(currentP1.x - p.x);
+              const playerIsLeft = currentP1.x < p.x;
+
+              // AI decision making (every few frames for more natural feel)
+              if (aiDecisionTimer.current % 8 === 0) {
+                // Face the player
+                p.facing = playerIsLeft ? 'left' : 'right';
+
+                // Move towards player if too far, back away if too close
+                if (distance > 200) {
+                  p.vx = playerIsLeft ? -MOVE_SPEED * 0.8 : MOVE_SPEED * 0.8;
+                } else if (distance < 80) {
+                  // Back away or jump
+                  if (Math.random() > 0.5 && !p.isJumping) {
+                    p.vy = JUMP_FORCE;
+                    p.isJumping = true;
+                  } else {
+                    p.vx = playerIsLeft ? MOVE_SPEED * 0.6 : -MOVE_SPEED * 0.6;
+                  }
+                } else {
+                  p.vx *= 0.8;
+                }
+
+                // Attack when in range
+                if (distance < 120 && p.attackCooldown <= 0) {
+                  const rand = Math.random();
+                  if (p.specialCharge >= 100 && rand > 0.7) {
+                    p.isAttacking = true;
+                    p.attackType = 'special';
+                    p.specialCharge = 0;
+                  } else if (rand > 0.5) {
+                    p.isAttacking = true;
+                    p.attackType = 'kick';
+                    p.attackCooldown = ATTACKS.kick.cooldown;
+                  } else if (rand > 0.2) {
+                    p.isAttacking = true;
+                    p.attackType = 'punch';
+                    p.attackCooldown = ATTACKS.punch.cooldown;
+                  }
+                }
+
+                // Occasional random jumps for variety
+                if (Math.random() > 0.95 && !p.isJumping) {
+                  p.vy = JUMP_FORCE;
+                  p.isJumping = true;
+                }
+              } else {
+                p.vx *= 0.95;
+              }
+
+              return currentP1;
+            });
+          }
+        } else {
+          p.vx *= 0.8;
+        }
+
+        // Physics
+        p.vy += GRAVITY;
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // Ground collision
+        if (p.y >= GROUND_Y) {
+          p.y = GROUND_Y;
+          p.vy = 0;
+          p.isJumping = false;
+        }
+
+        // Boundaries
+        p.x = Math.max(50, Math.min(GAME_WIDTH - 50, p.x));
+
+        // Reset attack state
+        if (p.attackCooldown <= ATTACKS[p.attackType === 'none' ? 'punch' : p.attackType].cooldown - 5) {
+          p.isAttacking = false;
+          p.attackType = 'none';
+        }
+
+        return p;
+      });
+
+      // Hit detection
+      setP1(prev1 => {
+        setP2(prev2 => {
+          let p1Updated = { ...prev1 };
+          let p2Updated = { ...prev2 };
+          const distance = Math.abs(p1Updated.x - p2Updated.x);
+
+          // P1 attacking P2
+          if (p1Updated.isAttacking && p1Updated.attackType !== 'none') {
+            const attack = ATTACKS[p1Updated.attackType];
+            const inRange = distance < attack.range;
+            const facingRight = p1Updated.facing === 'right' && p2Updated.x > p1Updated.x;
+            const facingLeft = p1Updated.facing === 'left' && p2Updated.x < p1Updated.x;
+
+            if (inRange && (facingRight || facingLeft) && p2Updated.stunned <= 0) {
+              const damage = attack.damage + Math.floor(Math.random() * 5);
+              p2Updated.health = Math.max(0, p2Updated.health - damage);
+              p2Updated.vx = (p1Updated.facing === 'right' ? 1 : -1) * attack.knockback;
+              p2Updated.vy = -8;
+              p2Updated.stunned = 20;
+              p1Updated.combo++;
+              p1Updated.specialCharge = Math.min(100, p1Updated.specialCharge + 10);
+
+              const hitX = (p1Updated.x + p2Updated.x) / 2;
+              const hitY = p2Updated.y - 50;
+              const texts = ['POW!', 'BAM!', 'WHAM!', 'CRASH!', 'BOOM!'];
+              if (p1Updated.attackType === 'special') {
+                addHitEffect(hitX, hitY, `💥 SUPER! -${damage}`);
+              } else {
+                addHitEffect(hitX, hitY, `${texts[Math.floor(Math.random() * texts.length)]} -${damage}`);
+              }
+            }
+          }
+
+          // P2 attacking P1
+          if (p2Updated.isAttacking && p2Updated.attackType !== 'none') {
+            const attack = ATTACKS[p2Updated.attackType];
+            const inRange = distance < attack.range;
+            const facingRight = p2Updated.facing === 'right' && p1Updated.x > p2Updated.x;
+            const facingLeft = p2Updated.facing === 'left' && p1Updated.x < p2Updated.x;
+
+            if (inRange && (facingRight || facingLeft) && p1Updated.stunned <= 0) {
+              const damage = attack.damage + Math.floor(Math.random() * 5);
+              p1Updated.health = Math.max(0, p1Updated.health - damage);
+              p1Updated.vx = (p2Updated.facing === 'right' ? 1 : -1) * attack.knockback;
+              p1Updated.vy = -8;
+              p1Updated.stunned = 20;
+              p2Updated.combo++;
+              p2Updated.specialCharge = Math.min(100, p2Updated.specialCharge + 10);
+
+              const hitX = (p1Updated.x + p2Updated.x) / 2;
+              const hitY = p1Updated.y - 50;
+              const texts = ['POW!', 'BAM!', 'WHAM!', 'CRASH!', 'BOOM!'];
+              if (p2Updated.attackType === 'special') {
+                addHitEffect(hitX, hitY, `💥 SUPER! -${damage}`);
+              } else {
+                addHitEffect(hitX, hitY, `${texts[Math.floor(Math.random() * texts.length)]} -${damage}`);
+              }
+            }
+          }
+
+          // Check for KO
+          if (p1Updated.health <= 0) {
+            setWinner('prime');
+            setPrimeScore(s => s + 1);
+            setGameState('roundEnd');
+          } else if (p2Updated.health <= 0) {
+            setWinner('optimus');
+            setOptimusScore(s => s + 1);
+            setGameState('roundEnd');
+          }
+
+          // Return p2 state
+          return p2Updated;
+        });
+        return prev1;
+      });
+
+    }, 1000 / 60);
+
+    return () => clearInterval(gameLoop);
+  }, [gameState, gameMode, addHitEffect]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
-    <div className="min-h-screen overflow-hidden select-none" style={{
-      background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)'
-    }}>
+    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4">
       <style jsx global>{`
-        @keyframes glow {
-          from { text-shadow: 0 0 20px #ff6b6b, 0 0 40px #ff6b6b; }
-          to { text-shadow: 0 0 30px #4ecdc4, 0 0 60px #4ecdc4, 0 0 80px #4ecdc4; }
-        }
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-10px) rotate(-2deg); }
-          75% { transform: translateX(10px) rotate(2deg); }
-        }
-        @keyframes pulse {
-          from { transform: scale(1); }
-          to { transform: scale(1.1); }
-        }
         @keyframes hitPop {
           0% { transform: scale(0) rotate(-10deg); opacity: 1; }
           50% { transform: scale(1.5) rotate(5deg); opacity: 1; }
-          100% { transform: scale(0.5) translateY(-50px); opacity: 0; }
+          100% { transform: scale(0.5) translateY(-30px); opacity: 0; }
         }
-        @keyframes victoryBounce {
-          0%, 100% { transform: scale(1) rotate(0deg); }
-          25% { transform: scale(1.2) rotate(-5deg); }
-          50% { transform: scale(1.3) rotate(5deg); }
-          75% { transform: scale(1.2) rotate(-3deg); }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
         }
-        @keyframes flash {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.05); }
+        }
+        @keyframes glow {
+          0%, 100% { filter: drop-shadow(0 0 10px gold); }
+          50% { filter: drop-shadow(0 0 30px gold); }
         }
       `}</style>
 
-      {/* Score Board */}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 flex items-center gap-8 z-50">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-red-400">{optimusScore}</div>
-          <div className="text-xs text-zinc-400">OPTIMUS</div>
-        </div>
-        <h1
-          className="text-3xl md:text-4xl font-black text-white text-center"
-          style={{
-            textShadow: '0 0 20px #ff6b6b, 0 0 40px #ff6b6b',
-            animation: 'glow 2s ease-in-out infinite alternate',
-            fontFamily: 'Arial Black, sans-serif'
-          }}
-        >
+      {/* Header */}
+      <div className="w-full max-w-5xl mb-4">
+        <h1 className="text-4xl font-black text-center text-white mb-2"
+            style={{ textShadow: '0 0 20px #ff6b6b' }}>
           CHIME FIGHTERS
         </h1>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-yellow-400">{primeScore}</div>
-          <div className="text-xs text-zinc-400">PRIME</div>
-        </div>
-      </div>
 
-      {/* Health Bars */}
-      <div className="fixed top-20 left-0 right-0 px-8 flex justify-between items-center z-40">
-        {/* Optimus Health */}
-        <div className="w-[35%]">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-red-400 font-bold text-sm">OPTIMUS CHIME</span>
-            {optimusPower !== 'none' && (
-              <span className="text-lg">{POWER_UPS.find(p => p.name === optimusPower)?.emoji}</span>
-            )}
+        {/* Score and Timer */}
+        <div className="flex justify-between items-center px-4">
+          <div className="text-center">
+            <div className="text-3xl font-bold text-red-400">{optimusScore}</div>
+            <div className="text-sm text-zinc-400">OPTIMUS</div>
           </div>
-          <div className="h-6 bg-zinc-800 rounded-full overflow-hidden border-2 border-red-900">
-            <div
-              className="h-full transition-all duration-200"
-              style={{
-                width: `${optimusHealth}%`,
-                background: optimusHealth > 50 ? 'linear-gradient(90deg, #22c55e, #4ade80)' :
-                           optimusHealth > 25 ? 'linear-gradient(90deg, #eab308, #facc15)' :
-                           'linear-gradient(90deg, #dc2626, #ef4444)',
-                animation: optimusHealth < 25 ? 'flash 0.3s infinite' : 'none'
-              }}
-            />
-          </div>
-        </div>
 
-        {/* VS / Combo */}
-        <div className="text-center">
-          {gameState === 'fighting' && (
-            <>
-              <div className="text-4xl font-black text-red-500" style={{ textShadow: '0 0 20px #f00' }}>
-                {attackMessage}
-              </div>
-              {combo > 3 && (
-                <div className="text-yellow-400 text-sm">
-                  {combo}x COMBO!
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Prime Health */}
-        <div className="w-[35%]">
-          <div className="flex items-center justify-end gap-2 mb-1">
-            {primePower !== 'none' && (
-              <span className="text-lg">{POWER_UPS.find(p => p.name === primePower)?.emoji}</span>
-            )}
-            <span className="text-yellow-400 font-bold text-sm">PRIME CHIME</span>
+          <div className="text-center">
+            <div className="text-sm text-zinc-400">ROUND {round}</div>
+            <div className={`text-4xl font-mono font-bold ${timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+              {formatTime(timeLeft)}
+            </div>
           </div>
-          <div className="h-6 bg-zinc-800 rounded-full overflow-hidden border-2 border-yellow-900">
-            <div
-              className="h-full transition-all duration-200 ml-auto"
-              style={{
-                width: `${primeHealth}%`,
-                background: primeHealth > 50 ? 'linear-gradient(90deg, #4ade80, #22c55e)' :
-                           primeHealth > 25 ? 'linear-gradient(90deg, #facc15, #eab308)' :
-                           'linear-gradient(90deg, #ef4444, #dc2626)',
-                animation: primeHealth < 25 ? 'flash 0.3s infinite' : 'none'
-              }}
-            />
+
+          <div className="text-center">
+            <div className="text-3xl font-bold text-yellow-400">{primeScore}</div>
+            <div className="text-sm text-zinc-400">PRIME</div>
           </div>
         </div>
       </div>
 
-      {/* Fighters */}
-      <div className="fixed top-1/2 left-0 right-0 -translate-y-1/2 flex justify-between items-center px-12 md:px-24">
+      {/* Game Area */}
+      <div
+        ref={canvasRef}
+        className="relative bg-gradient-to-b from-indigo-900 via-purple-900 to-zinc-900 rounded-lg overflow-hidden border-4 border-zinc-700"
+        style={{ width: GAME_WIDTH, height: GAME_HEIGHT, maxWidth: '100%' }}
+      >
+        {/* Ground */}
+        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-zinc-800 to-zinc-700" />
+        <div className="absolute bottom-20 left-0 right-0 h-1 bg-zinc-600" />
+
+        {/* Health Bars */}
+        <div className="absolute top-4 left-4 right-4 flex justify-between gap-8">
+          {/* P1 Health */}
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-red-400 font-bold text-xs">
+                {gameMode === '1p' ? 'YOU (OPTIMUS)' : 'P1 OPTIMUS'}
+              </span>
+            </div>
+            <div className="h-4 bg-zinc-800 rounded overflow-hidden">
+              <div
+                className="h-full transition-all duration-100"
+                style={{
+                  width: `${p1.health}%`,
+                  background: p1.health > 50 ? '#22c55e' : p1.health > 25 ? '#eab308' : '#dc2626'
+                }}
+              />
+            </div>
+            {/* Special meter */}
+            <div className="h-2 bg-zinc-800 rounded mt-1 overflow-hidden">
+              <div
+                className="h-full bg-blue-500 transition-all duration-100"
+                style={{ width: `${p1.specialCharge}%` }}
+              />
+            </div>
+            <div className="text-xs text-zinc-500 mt-0.5">SPECIAL {p1.specialCharge >= 100 ? '✓ READY!' : ''}</div>
+          </div>
+
+          {/* P2 Health */}
+          <div className="flex-1">
+            <div className="flex items-center justify-end gap-2 mb-1">
+              <span className="text-yellow-400 font-bold text-xs">
+                {gameMode === '1p' ? '🤖 AI (PRIME)' : 'P2 PRIME'}
+              </span>
+            </div>
+            <div className="h-4 bg-zinc-800 rounded overflow-hidden">
+              <div
+                className="h-full transition-all duration-100 ml-auto"
+                style={{
+                  width: `${p2.health}%`,
+                  background: p2.health > 50 ? '#22c55e' : p2.health > 25 ? '#eab308' : '#dc2626'
+                }}
+              />
+            </div>
+            {/* Special meter */}
+            <div className="h-2 bg-zinc-800 rounded mt-1 overflow-hidden">
+              <div
+                className="h-full bg-blue-500 transition-all duration-100 ml-auto"
+                style={{ width: `${p2.specialCharge}%` }}
+              />
+            </div>
+            <div className="text-xs text-zinc-500 mt-0.5 text-right">{p2.specialCharge >= 100 ? 'READY! ✓' : ''} SPECIAL</div>
+          </div>
+        </div>
+
+        {/* Player 1 - Optimus */}
         <div
-          className="relative"
+          className="absolute transition-transform"
           style={{
-            animation: shakeLeft ? 'shake 0.2s ease-in-out' :
-                      gameState === 'fighting' ? 'pulse 0.5s ease-in-out infinite alternate' : 'none',
-            ...getPowerUpStyle(optimusPower)
+            left: p1.x - PLAYER_SIZE / 2,
+            top: p1.y - PLAYER_SIZE,
+            transform: `scaleX(${p1.facing === 'left' ? -1 : 1}) ${p1.stunned > 0 ? 'rotate(10deg)' : ''}`,
+            animation: p1.isAttacking ? 'pulse 0.1s ease-out' : 'none',
+            filter: p1.stunned > 0 ? 'brightness(2)' : p1.specialCharge >= 100 ? 'drop-shadow(0 0 10px blue)' : 'none'
           }}
         >
           <img
             src={OPTIMUS_IMG}
-            alt="Optimus Chime"
-            className="w-48 md:w-64 cursor-pointer transition-transform"
-            style={{
-              filter: winner === 'prime' ? 'grayscale(1) brightness(0.5)' :
-                     winner === 'optimus' ? 'drop-shadow(0 0 30px gold)' :
-                     'drop-shadow(0 0 10px rgba(255,100,100,0.5))',
-              animation: winner === 'optimus' ? 'victoryBounce 0.5s ease-in-out infinite' : 'none',
-              transform: winner === 'prime' ? 'rotate(15deg) translateY(20px)' : 'none'
-            }}
-            onClick={() => {
-              if (gameState === 'idle') startFight();
-              else if (gameState === 'fighting') {
-                setOptimusPower('mega');
-                setTimeout(() => setOptimusPower('none'), 2000);
-              }
-            }}
+            alt="Optimus"
+            style={{ width: PLAYER_SIZE, height: PLAYER_SIZE, objectFit: 'contain' }}
           />
-          <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-xs text-zinc-400">
-            Press A or Click
-          </div>
-        </div>
-
-        {/* Center content */}
-        <div className="text-center z-20">
-          {gameState === 'idle' && (
-            <div className="animate-pulse">
-              <div className="text-6xl font-black text-red-500 mb-4" style={{ textShadow: '0 0 30px #f00' }}>
-                VS
-              </div>
-              {showPrompt && (
-                <div className="bg-black/50 px-6 py-3 rounded-lg">
-                  <div className="text-yellow-400 text-xl font-bold animate-bounce">
-                    Press F to FIGHT!
-                  </div>
-                  <div className="text-zinc-400 text-sm mt-1">or wait for auto-battle</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {gameState === 'victory' && winner && (
-            <div className="animate-bounce">
-              <div className="text-4xl md:text-6xl font-black text-yellow-400 mb-2"
-                   style={{ textShadow: '0 0 30px gold, 0 0 60px gold' }}>
-                🏆 WINNER! 🏆
-              </div>
-              <div className="text-2xl text-white font-bold">
-                {winner === 'optimus' ? 'OPTIMUS CHIME' : 'PRIME CHIME'}
-              </div>
-              <div className="text-zinc-400 text-sm mt-4">
-                Next round starting soon... (or press F)
-              </div>
+          {p1.isAttacking && (
+            <div
+              className="absolute top-1/2 text-4xl"
+              style={{
+                left: p1.facing === 'right' ? PLAYER_SIZE : -40,
+                animation: 'pulse 0.1s'
+              }}
+            >
+              {p1.attackType === 'punch' ? '👊' : p1.attackType === 'kick' ? '🦵' : '💥'}
             </div>
           )}
         </div>
 
+        {/* Player 2 - Prime */}
         <div
-          className="relative"
+          className="absolute transition-transform"
           style={{
-            animation: shakeRight ? 'shake 0.2s ease-in-out' :
-                      gameState === 'fighting' ? 'pulse 0.5s ease-in-out infinite alternate-reverse' : 'none',
-            ...getPowerUpStyle(primePower)
+            left: p2.x - PLAYER_SIZE / 2,
+            top: p2.y - PLAYER_SIZE,
+            transform: `scaleX(${p2.facing === 'left' ? -1 : 1}) ${p2.stunned > 0 ? 'rotate(-10deg)' : ''}`,
+            animation: p2.isAttacking ? 'pulse 0.1s ease-out' : 'none',
+            filter: p2.stunned > 0 ? 'brightness(2)' : p2.specialCharge >= 100 ? 'drop-shadow(0 0 10px blue)' : 'none'
           }}
         >
           <img
             src={PRIME_IMG}
-            alt="Prime Chime"
-            className="w-48 md:w-64 cursor-pointer transition-transform"
-            style={{
-              filter: winner === 'optimus' ? 'grayscale(1) brightness(0.5)' :
-                     winner === 'prime' ? 'drop-shadow(0 0 30px gold)' :
-                     'drop-shadow(0 0 10px rgba(255,255,100,0.5))',
-              animation: winner === 'prime' ? 'victoryBounce 0.5s ease-in-out infinite' : 'none',
-              transform: winner === 'optimus' ? 'rotate(-15deg) translateY(20px)' : 'none'
-            }}
-            onClick={() => {
-              if (gameState === 'idle') startFight();
-              else if (gameState === 'fighting') {
-                setPrimePower('mega');
-                setTimeout(() => setPrimePower('none'), 2000);
-              }
-            }}
+            alt="Prime"
+            style={{ width: PLAYER_SIZE, height: PLAYER_SIZE, objectFit: 'contain' }}
           />
-          <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-xs text-zinc-400">
-            Press L or Click
-          </div>
+          {p2.isAttacking && (
+            <div
+              className="absolute top-1/2 text-4xl"
+              style={{
+                left: p2.facing === 'right' ? PLAYER_SIZE : -40,
+                animation: 'pulse 0.1s'
+              }}
+            >
+              {p2.attackType === 'punch' ? '👊' : p2.attackType === 'kick' ? '🦵' : '💥'}
+            </div>
+          )}
         </div>
-      </div>
 
-      {/* Power-up Legend */}
-      <div className="fixed bottom-20 left-1/2 -translate-x-1/2 flex gap-4 text-xs text-zinc-500">
-        {POWER_UPS.map(p => (
-          <span key={p.name}>{p.emoji} {p.name}</span>
+        {/* Hit Effects */}
+        {hitEffects.map(effect => (
+          <div
+            key={effect.id}
+            className="absolute text-2xl font-black text-yellow-300 pointer-events-none"
+            style={{
+              left: effect.x,
+              top: effect.y,
+              textShadow: '0 0 10px red',
+              animation: 'hitPop 0.5s ease-out forwards'
+            }}
+          >
+            {effect.text}
+          </div>
         ))}
+
+        {/* Menu Overlay */}
+        {gameState === 'menu' && (
+          <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
+            <h2 className="text-5xl font-black text-white mb-4" style={{ textShadow: '0 0 30px #ff6b6b' }}>
+              CHIME FIGHTERS
+            </h2>
+            <p className="text-zinc-400 mb-4">Our Fearless Leader & CEO Battle</p>
+
+            {/* Mode Selection */}
+            <div className="flex gap-4 mb-6">
+              <button
+                onClick={() => setGameMode('1p')}
+                className={`px-6 py-3 rounded-lg font-bold text-lg transition-all ${
+                  gameMode === '1p'
+                    ? 'bg-red-600 text-white shadow-lg shadow-red-500/50'
+                    : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                }`}
+              >
+                1 PLAYER vs AI
+              </button>
+              <button
+                onClick={() => setGameMode('2p')}
+                className={`px-6 py-3 rounded-lg font-bold text-lg transition-all ${
+                  gameMode === '2p'
+                    ? 'bg-yellow-600 text-white shadow-lg shadow-yellow-500/50'
+                    : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                }`}
+              >
+                2 PLAYERS
+              </button>
+            </div>
+
+            <div className="text-yellow-400 text-2xl font-bold animate-bounce mb-6">
+              Press SPACE or F to Start!
+            </div>
+
+            {gameMode === '1p' ? (
+              <div className="text-center text-sm text-zinc-300">
+                <div className="text-red-400 font-bold mb-2">YOUR CONTROLS (OPTIMUS)</div>
+                <div>W - Jump | A/D - Move</div>
+                <div>G - Punch | H - Kick | J - Special</div>
+                <div className="mt-4 text-yellow-400 font-bold">
+                  🤖 Prime Chime is controlled by AI
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-8 text-sm text-zinc-300">
+                <div>
+                  <div className="text-red-400 font-bold mb-2">PLAYER 1 (OPTIMUS)</div>
+                  <div>W - Jump</div>
+                  <div>A/D - Move</div>
+                  <div>G - Punch</div>
+                  <div>H - Kick</div>
+                  <div>J - Special (when full)</div>
+                </div>
+                <div>
+                  <div className="text-yellow-400 font-bold mb-2">PLAYER 2 (PRIME)</div>
+                  <div>↑ - Jump</div>
+                  <div>←/→ - Move</div>
+                  <div>, or 1 - Punch</div>
+                  <div>. or 2 - Kick</div>
+                  <div>/ or 3 - Special (when full)</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Round End Overlay */}
+        {gameState === 'roundEnd' && (
+          <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
+            <div className="text-4xl font-black text-yellow-400 mb-4" style={{ animation: 'glow 0.5s infinite' }}>
+              {winner === 'draw' ? '🤝 DRAW! 🤝' : '🏆 K.O.! 🏆'}
+            </div>
+            {winner !== 'draw' && (
+              <div className="text-3xl text-white font-bold mb-4">
+                {winner === 'optimus' ? 'OPTIMUS CHIME' : 'PRIME CHIME'} WINS!
+              </div>
+            )}
+            <div className="text-zinc-400 mb-8">
+              Score: {optimusScore} - {primeScore}
+            </div>
+            <div className="text-yellow-400 animate-bounce">
+              Press SPACE for next round
+            </div>
+          </div>
+        )}
       </div>
 
-      <p className="fixed bottom-4 left-1/2 -translate-x-1/2 text-zinc-600 text-xs text-center z-50 px-4">
+      {/* Controls reminder */}
+      <div className="mt-4 text-zinc-500 text-xs text-center">
+        P1: WASD + G(punch) H(kick) J(special) | P2: Arrows + ,(punch) .(kick) /(special)
+      </div>
+
+      <p className="mt-2 text-zinc-600 text-xs">
         This is satire - no affiliation with Axon Enterprise, Inc.
       </p>
     </div>

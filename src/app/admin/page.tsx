@@ -4,6 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { SubdomainConfig } from '@/types';
 
+// Custom-coded pages that exist as actual React components in /src/app/s/[subdomain]/
+// These cannot be edited through the CMS - they must be modified in the codebase
+const CUSTOM_PAGES = ['optimuschime'];
+
 interface ImageInfo {
   url: string;
   pathname: string;
@@ -383,31 +387,39 @@ export default function AdminPage() {
                           <div className="flex items-center gap-3 mb-1">
                             <span className="font-medium">{sub.subdomain}.byaxon.com</span>
                             <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
+                              CUSTOM_PAGES.includes(sub.subdomain) ? 'bg-pink-900 text-pink-300' :
                               sub.type === 'redirect' ? 'bg-blue-900 text-blue-300' :
                               sub.type === 'markdown' ? 'bg-green-900 text-green-300' :
                               sub.type === 'iframe' ? 'bg-orange-900 text-orange-300' :
+                              sub.type === 'custom' ? 'bg-pink-900 text-pink-300' :
                               'bg-purple-900 text-purple-300'
                             }`}>
-                              {sub.type}
+                              {CUSTOM_PAGES.includes(sub.subdomain) ? 'custom' : sub.type}
                             </span>
                           </div>
                           <div className="text-sm text-zinc-400 truncate">
-                            {sub.type === 'redirect' ? (
+                            {CUSTOM_PAGES.includes(sub.subdomain) ? (
+                              <span className="text-pink-400">⚡ Custom coded page - edit in codebase</span>
+                            ) : sub.type === 'redirect' ? (
                               <span title={sub.content}>→ {sub.content}</span>
                             ) : sub.type === 'iframe' ? (
                               <span title={sub.content}>⧉ {sub.content}</span>
+                            ) : sub.type === 'custom' ? (
+                              <span className="text-pink-400">⚡ Custom coded page - edit in codebase</span>
                             ) : (
                               <span>{sub.title || 'Untitled'}</span>
                             )}
                           </div>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
-                          <button
-                            onClick={() => startEdit(sub)}
-                            className="text-zinc-400 hover:text-white text-sm transition"
-                          >
-                            Edit
-                          </button>
+                          {!CUSTOM_PAGES.includes(sub.subdomain) && sub.type !== 'custom' && (
+                            <button
+                              onClick={() => startEdit(sub)}
+                              className="text-zinc-400 hover:text-white text-sm transition"
+                            >
+                              Edit
+                            </button>
+                          )}
                           <button
                             onClick={() => handleDelete(sub.subdomain)}
                             className="text-red-400 hover:text-red-300 text-sm transition"
