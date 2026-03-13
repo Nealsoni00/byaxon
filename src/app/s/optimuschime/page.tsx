@@ -73,27 +73,48 @@ export default function ChimeFighters() {
   const effectId = useRef(0);
   const aiDecisionTimer = useRef(0);
 
-  // Pre-generate random patterns for skyline (so they don't change on re-render)
-  const skylineData = useMemo(() => ({
+  // Pre-generate random patterns for skyline (client-side only to avoid hydration mismatch)
+  const [skylineData, setSkylineData] = useState<{
+    buildings: boolean[][],
+    stars: { size: number, left: number, top: number, opacity: number, duration: number }[]
+  }>({
     buildings: [
-      [...Array(24)].map(() => Math.random() > 0.4),
-      [...Array(20)].map(() => Math.random() > 0.5),
-      [...Array(30)].map(() => Math.random() > 0.45),
-      [...Array(15)].map(() => Math.random() > 0.5),
-      [...Array(21)].map(() => Math.random() > 0.45),
-      [...Array(28)].map(() => Math.random() > 0.5),
-      [...Array(18)].map(() => Math.random() > 0.55),
-      [...Array(32)].map(() => Math.random() > 0.5),
-      [...Array(12)].map(() => Math.random() > 0.5),
+      Array(24).fill(false),
+      Array(20).fill(false),
+      Array(30).fill(false),
+      Array(15).fill(false),
+      Array(21).fill(false),
+      Array(28).fill(false),
+      Array(18).fill(false),
+      Array(32).fill(false),
+      Array(12).fill(false),
     ],
-    stars: [...Array(30)].map(() => ({
-      size: Math.random() > 0.7 ? 3 : 2,
-      left: Math.random() * 100,
-      top: Math.random() * 100,
-      opacity: 0.4 + Math.random() * 0.6,
-      duration: 2 + Math.random() * 3
-    }))
-  }), []);
+    stars: []
+  });
+
+  useEffect(() => {
+    // Generate random patterns only on client to avoid hydration mismatch
+    setSkylineData({
+      buildings: [
+        [...Array(24)].map(() => Math.random() > 0.4),
+        [...Array(20)].map(() => Math.random() > 0.5),
+        [...Array(30)].map(() => Math.random() > 0.45),
+        [...Array(15)].map(() => Math.random() > 0.5),
+        [...Array(21)].map(() => Math.random() > 0.45),
+        [...Array(28)].map(() => Math.random() > 0.5),
+        [...Array(18)].map(() => Math.random() > 0.55),
+        [...Array(32)].map(() => Math.random() > 0.5),
+        [...Array(12)].map(() => Math.random() > 0.5),
+      ],
+      stars: [...Array(30)].map(() => ({
+        size: Math.random() > 0.7 ? 3 : 2,
+        left: Math.random() * 100,
+        top: Math.random() * 100,
+        opacity: 0.4 + Math.random() * 0.6,
+        duration: 2 + Math.random() * 3
+      }))
+    });
+  }, []);
 
   const createPlayer = (x: number, facing: 'left' | 'right'): Player => ({
     x, y: GROUND_Y, vx: 0, vy: 0, health: 100,
