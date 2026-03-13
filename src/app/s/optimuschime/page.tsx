@@ -309,46 +309,49 @@ export default function ChimeFighters() {
           // Always face player
           p2.facing = playerIsLeft ? 'left' : 'right';
 
-          // AI makes decisions more frequently for better responsiveness
-          if (aiDecisionTimer.current % 5 === 0) {
-            // Aggressive movement - always try to get in attack range
-            if (distance > 100) {
-              p2.vx = playerIsLeft ? -MOVE_SPEED * 0.9 : MOVE_SPEED * 0.9;
-            } else if (distance < 60) {
-              // Too close, back up slightly or attack
-              if (p2.attackCooldown <= 0) {
-                // Attack immediately when close!
+          // AI makes decisions slowly (every 15 frames = ~4 times per second)
+          if (aiDecisionTimer.current % 15 === 0) {
+            // Casual movement - sometimes approach, sometimes idle
+            if (distance > 150 && Math.random() > 0.3) {
+              // Move toward player slowly
+              p2.vx = playerIsLeft ? -MOVE_SPEED * 0.5 : MOVE_SPEED * 0.5;
+            } else if (distance < 70) {
+              // Sometimes back away, sometimes attack
+              if (Math.random() > 0.6) {
+                p2.vx = playerIsLeft ? MOVE_SPEED * 0.4 : -MOVE_SPEED * 0.4;
+              } else if (p2.attackCooldown <= 0 && Math.random() > 0.5) {
+                // 50% chance to attack when close
                 const rand = Math.random();
-                if (p2.specialCharge >= 100) {
+                if (p2.specialCharge >= 100 && rand > 0.8) {
                   p2.isAttacking = true; p2.attackType = 'special'; p2.specialCharge = 0;
-                } else if (rand > 0.4) {
+                } else if (rand > 0.6) {
                   p2.isAttacking = true; p2.attackType = 'kick'; p2.attackCooldown = ATTACKS.kick.cooldown;
-                } else {
+                } else if (rand > 0.4) {
                   p2.isAttacking = true; p2.attackType = 'punch'; p2.attackCooldown = ATTACKS.punch.cooldown;
                 }
-              } else {
-                // Back away while on cooldown
-                p2.vx = playerIsLeft ? MOVE_SPEED * 0.5 : -MOVE_SPEED * 0.5;
+                // else: AI hesitates and doesn't attack
               }
             } else {
-              // In attack range - attack!
-              if (p2.attackCooldown <= 0) {
+              // In mid range - sometimes attack, often idle
+              if (p2.attackCooldown <= 0 && Math.random() > 0.7) {
+                // Only 30% chance to attack
                 const rand = Math.random();
-                if (p2.specialCharge >= 100 && rand > 0.5) {
-                  p2.isAttacking = true; p2.attackType = 'special'; p2.specialCharge = 0;
-                } else if (rand > 0.3) {
+                if (rand > 0.7) {
                   p2.isAttacking = true; p2.attackType = 'kick'; p2.attackCooldown = ATTACKS.kick.cooldown;
-                } else {
+                } else if (rand > 0.5) {
                   p2.isAttacking = true; p2.attackType = 'punch'; p2.attackCooldown = ATTACKS.punch.cooldown;
                 }
               }
-              p2.vx *= 0.8;
+              p2.vx *= 0.7;
             }
 
-            // Jump to dodge or close distance
-            if (!p2.isJumping && Math.random() > 0.92) {
+            // Rarely jump
+            if (!p2.isJumping && Math.random() > 0.97) {
               p2.vy = JUMP_FORCE; p2.isJumping = true;
             }
+          } else {
+            // Between decisions, slow down
+            p2.vx *= 0.9;
           }
         }
       } else {
