@@ -1,0 +1,22 @@
+{
+  "subdomains": [
+    {
+      "subdomain": "demo",
+      "type": "markdown",
+      "content": "# Welcome to Demo\n\nThis is a demo subdomain powered by **byaxon**.\n\n## Features\n- Dynamic subdomains\n- Markdown support\n- Redirects\n\nEdit this in the admin panel!",
+      "title": "Demo Subdomain",
+      "description": "A demo subdomain",
+      "createdAt": "2024-01-01T00:00:00Z",
+      "updatedAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "subdomain": "github",
+      "type": "redirect",
+      "content": "https://github.com",
+      "title": "GitHub Redirect",
+      "description": "Redirects to GitHub",
+      "createdAt": "2024-01-01T00:00:00Z",
+      "updatedAt": "2024-01-01T00:00:00Z"
+    }
+  ]
+}
