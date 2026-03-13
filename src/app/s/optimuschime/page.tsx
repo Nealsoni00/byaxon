@@ -54,35 +54,27 @@ export default function ChimeFighters() {
   const keysPressed = useRef<Set<string>>(new Set());
   const effectId = useRef(0);
   const aiDecisionTimer = useRef(0);
-  const p1Ref = useRef({ x: 200, y: GROUND_Y }); // Track P1 position for AI
 
-  const [p1, setP1] = useState<Player>({
-    x: 200, y: GROUND_Y, vx: 0, vy: 0, health: 100,
-    facing: 'right', isJumping: false, isAttacking: false,
+  const createPlayer = (x: number, facing: 'left' | 'right'): Player => ({
+    x, y: GROUND_Y, vx: 0, vy: 0, health: 100,
+    facing, isJumping: false, isAttacking: false,
     attackType: 'none', attackCooldown: 0, specialCooldown: 0,
     specialCharge: 0, stunned: 0, combo: 0
   });
 
-  const [p2, setP2] = useState<Player>({
-    x: 900, y: GROUND_Y, vx: 0, vy: 0, health: 100,
-    facing: 'left', isJumping: false, isAttacking: false,
-    attackType: 'none', attackCooldown: 0, specialCooldown: 0,
-    specialCharge: 0, stunned: 0, combo: 0
-  });
+  // Use refs for game state to avoid React batching issues
+  const p1Ref = useRef<Player>(createPlayer(200, 'right'));
+  const p2Ref = useRef<Player>(createPlayer(900, 'left'));
+
+  // React state for rendering only
+  const [p1, setP1] = useState<Player>(createPlayer(200, 'right'));
+  const [p2, setP2] = useState<Player>(createPlayer(900, 'left'));
 
   const resetPlayers = useCallback(() => {
-    setP1({
-      x: 200, y: GROUND_Y, vx: 0, vy: 0, health: 100,
-      facing: 'right', isJumping: false, isAttacking: false,
-      attackType: 'none', attackCooldown: 0, specialCooldown: 0,
-      specialCharge: 0, stunned: 0, combo: 0
-    });
-    setP2({
-      x: 900, y: GROUND_Y, vx: 0, vy: 0, health: 100,
-      facing: 'left', isJumping: false, isAttacking: false,
-      attackType: 'none', attackCooldown: 0, specialCooldown: 0,
-      specialCharge: 0, stunned: 0, combo: 0
-    });
+    p1Ref.current = createPlayer(200, 'right');
+    p2Ref.current = createPlayer(900, 'left');
+    setP1(createPlayer(200, 'right'));
+    setP2(createPlayer(900, 'left'));
   }, []);
 
   const startGame = useCallback(() => {
@@ -159,300 +151,192 @@ export default function ChimeFighters() {
     return () => clearInterval(timer);
   }, [gameState, p1.health, p2.health]);
 
-  // Game loop
+  // Game loop - uses refs for all game logic to avoid React state batching issues
   useEffect(() => {
     if (gameState !== 'fighting') return;
 
     const gameLoop = setInterval(() => {
-      setP1(prev => {
-        const p = { ...prev };
-        const keys = keysPressed.current;
+      const keys = keysPressed.current;
+      const p1 = p1Ref.current;
+      const p2 = p2Ref.current;
 
-        // Reduce cooldowns
-        if (p.attackCooldown > 0) p.attackCooldown--;
-        if (p.specialCooldown > 0) p.specialCooldown--;
-        if (p.stunned > 0) {
-          p.stunned--;
-          p.vx *= 0.9;
+      // === UPDATE P1 ===
+      if (p1.attackCooldown > 0) p1.attackCooldown--;
+      if (p1.specialCooldown > 0) p1.specialCooldown--;
+      if (p1.stunned > 0) {
+        p1.stunned--;
+        p1.vx *= 0.9;
+      }
+      if (p1.specialCharge < 100) p1.specialCharge += 0.2;
+
+      if (p1.stunned <= 0) {
+        if (keys.has('a')) { p1.vx = -MOVE_SPEED; p1.facing = 'left'; }
+        else if (keys.has('d')) { p1.vx = MOVE_SPEED; p1.facing = 'right'; }
+        else { p1.vx *= 0.8; }
+
+        if (keys.has('w') && !p1.isJumping) { p1.vy = JUMP_FORCE; p1.isJumping = true; }
+
+        if (p1.attackCooldown <= 0) {
+          if (keys.has('g')) { p1.isAttacking = true; p1.attackType = 'punch'; p1.attackCooldown = ATTACKS.punch.cooldown; }
+          else if (keys.has('h')) { p1.isAttacking = true; p1.attackType = 'kick'; p1.attackCooldown = ATTACKS.kick.cooldown; }
+          else if (keys.has('j') && p1.specialCharge >= 100) { p1.isAttacking = true; p1.attackType = 'special'; p1.specialCharge = 0; }
         }
+      }
 
-        // Build special charge
-        if (p.specialCharge < 100) p.specialCharge += 0.2;
+      p1.vy += GRAVITY; p1.x += p1.vx; p1.y += p1.vy;
+      if (p1.y >= GROUND_Y) { p1.y = GROUND_Y; p1.vy = 0; p1.isJumping = false; }
+      p1.x = Math.max(50, Math.min(GAME_WIDTH - 50, p1.x));
+      if (p1.attackCooldown <= ATTACKS[p1.attackType === 'none' ? 'punch' : p1.attackType].cooldown - 5) {
+        p1.isAttacking = false; p1.attackType = 'none';
+      }
 
-        if (p.stunned <= 0) {
-          // Movement - WASD
-          if (keys.has('a')) {
-            p.vx = -MOVE_SPEED;
-            p.facing = 'left';
-          } else if (keys.has('d')) {
-            p.vx = MOVE_SPEED;
-            p.facing = 'right';
-          } else {
-            p.vx *= 0.8;
-          }
+      // === UPDATE P2 ===
+      if (p2.attackCooldown > 0) p2.attackCooldown--;
+      if (p2.specialCooldown > 0) p2.specialCooldown--;
+      if (p2.stunned > 0) {
+        p2.stunned--;
+        p2.vx *= 0.9;
+      }
+      if (p2.specialCharge < 100) p2.specialCharge += 0.2;
 
-          // Jump - W
-          if (keys.has('w') && !p.isJumping) {
-            p.vy = JUMP_FORCE;
-            p.isJumping = true;
-          }
+      if (p2.stunned <= 0) {
+        if (gameMode === '2p') {
+          if (keys.has('arrowleft')) { p2.vx = -MOVE_SPEED; p2.facing = 'left'; }
+          else if (keys.has('arrowright')) { p2.vx = MOVE_SPEED; p2.facing = 'right'; }
+          else { p2.vx *= 0.8; }
 
-          // Attacks
-          if (p.attackCooldown <= 0) {
-            if (keys.has('g')) { // Punch
-              p.isAttacking = true;
-              p.attackType = 'punch';
-              p.attackCooldown = ATTACKS.punch.cooldown;
-            } else if (keys.has('h')) { // Kick
-              p.isAttacking = true;
-              p.attackType = 'kick';
-              p.attackCooldown = ATTACKS.kick.cooldown;
-            } else if (keys.has('j') && p.specialCharge >= 100) { // Special
-              p.isAttacking = true;
-              p.attackType = 'special';
-              p.specialCharge = 0;
-            }
-          }
-        }
+          if (keys.has('arrowup') && !p2.isJumping) { p2.vy = JUMP_FORCE; p2.isJumping = true; }
 
-        // Physics
-        p.vy += GRAVITY;
-        p.x += p.vx;
-        p.y += p.vy;
-
-        // Ground collision
-        if (p.y >= GROUND_Y) {
-          p.y = GROUND_Y;
-          p.vy = 0;
-          p.isJumping = false;
-        }
-
-        // Boundaries
-        p.x = Math.max(50, Math.min(GAME_WIDTH - 50, p.x));
-
-        // Reset attack state
-        if (p.attackCooldown <= ATTACKS[p.attackType === 'none' ? 'punch' : p.attackType].cooldown - 5) {
-          p.isAttacking = false;
-          p.attackType = 'none';
-        }
-
-        // Update ref for AI to read
-        p1Ref.current = { x: p.x, y: p.y };
-
-        return p;
-      });
-
-      setP2(prev => {
-        const p = { ...prev };
-        const keys = keysPressed.current;
-
-        // Reduce cooldowns
-        if (p.attackCooldown > 0) p.attackCooldown--;
-        if (p.specialCooldown > 0) p.specialCooldown--;
-        if (p.stunned > 0) {
-          p.stunned--;
-          p.vx *= 0.9;
-        }
-
-        // Build special charge
-        if (p.specialCharge < 100) p.specialCharge += 0.2;
-
-        if (p.stunned <= 0) {
-          if (gameMode === '2p') {
-            // Player 2 controls - Arrow keys
-            if (keys.has('arrowleft')) {
-              p.vx = -MOVE_SPEED;
-              p.facing = 'left';
-            } else if (keys.has('arrowright')) {
-              p.vx = MOVE_SPEED;
-              p.facing = 'right';
-            } else {
-              p.vx *= 0.8;
-            }
-
-            // Jump - Up arrow
-            if (keys.has('arrowup') && !p.isJumping) {
-              p.vy = JUMP_FORCE;
-              p.isJumping = true;
-            }
-
-            // Attacks
-            if (p.attackCooldown <= 0) {
-              if (keys.has(',') || keys.has('1')) { // Punch
-                p.isAttacking = true;
-                p.attackType = 'punch';
-                p.attackCooldown = ATTACKS.punch.cooldown;
-              } else if (keys.has('.') || keys.has('2')) { // Kick
-                p.isAttacking = true;
-                p.attackType = 'kick';
-                p.attackCooldown = ATTACKS.kick.cooldown;
-              } else if ((keys.has('/') || keys.has('3')) && p.specialCharge >= 100) { // Special
-                p.isAttacking = true;
-                p.attackType = 'special';
-                p.specialCharge = 0;
-              }
-            }
-          } else {
-            // AI Controls for single player mode
-            aiDecisionTimer.current++;
-
-            // Get P1 position from ref
-            const p1Pos = p1Ref.current;
-            const distance = Math.abs(p1Pos.x - p.x);
-            const playerIsLeft = p1Pos.x < p.x;
-
-            // AI decision making (every few frames for more natural feel)
-            if (aiDecisionTimer.current % 8 === 0) {
-              // Face the player
-              p.facing = playerIsLeft ? 'left' : 'right';
-
-              // Move towards player if too far, back away if too close
-              if (distance > 200) {
-                p.vx = playerIsLeft ? -MOVE_SPEED * 0.8 : MOVE_SPEED * 0.8;
-              } else if (distance < 80) {
-                // Back away or jump
-                if (Math.random() > 0.5 && !p.isJumping) {
-                  p.vy = JUMP_FORCE;
-                  p.isJumping = true;
-                } else {
-                  p.vx = playerIsLeft ? MOVE_SPEED * 0.6 : -MOVE_SPEED * 0.6;
-                }
-              } else {
-                p.vx *= 0.8;
-              }
-
-              // Attack when in range
-              if (distance < 120 && p.attackCooldown <= 0) {
-                const rand = Math.random();
-                if (p.specialCharge >= 100 && rand > 0.7) {
-                  p.isAttacking = true;
-                  p.attackType = 'special';
-                  p.specialCharge = 0;
-                } else if (rand > 0.5) {
-                  p.isAttacking = true;
-                  p.attackType = 'kick';
-                  p.attackCooldown = ATTACKS.kick.cooldown;
-                } else if (rand > 0.2) {
-                  p.isAttacking = true;
-                  p.attackType = 'punch';
-                  p.attackCooldown = ATTACKS.punch.cooldown;
-                }
-              }
-
-              // Occasional random jumps for variety
-              if (Math.random() > 0.95 && !p.isJumping) {
-                p.vy = JUMP_FORCE;
-                p.isJumping = true;
-              }
-            } else {
-              p.vx *= 0.95;
-            }
+          if (p2.attackCooldown <= 0) {
+            if (keys.has(',') || keys.has('1')) { p2.isAttacking = true; p2.attackType = 'punch'; p2.attackCooldown = ATTACKS.punch.cooldown; }
+            else if (keys.has('.') || keys.has('2')) { p2.isAttacking = true; p2.attackType = 'kick'; p2.attackCooldown = ATTACKS.kick.cooldown; }
+            else if ((keys.has('/') || keys.has('3')) && p2.specialCharge >= 100) { p2.isAttacking = true; p2.attackType = 'special'; p2.specialCharge = 0; }
           }
         } else {
-          p.vx *= 0.8;
-        }
+          // SMARTER AI
+          aiDecisionTimer.current++;
+          const distance = Math.abs(p1.x - p2.x);
+          const playerIsLeft = p1.x < p2.x;
 
-        // Physics
-        p.vy += GRAVITY;
-        p.x += p.vx;
-        p.y += p.vy;
+          // Always face player
+          p2.facing = playerIsLeft ? 'left' : 'right';
 
-        // Ground collision
-        if (p.y >= GROUND_Y) {
-          p.y = GROUND_Y;
-          p.vy = 0;
-          p.isJumping = false;
-        }
-
-        // Boundaries
-        p.x = Math.max(50, Math.min(GAME_WIDTH - 50, p.x));
-
-        // Reset attack state
-        if (p.attackCooldown <= ATTACKS[p.attackType === 'none' ? 'punch' : p.attackType].cooldown - 5) {
-          p.isAttacking = false;
-          p.attackType = 'none';
-        }
-
-        return p;
-      });
-
-      // Hit detection
-      setP1(prev1 => {
-        setP2(prev2 => {
-          let p1Updated = { ...prev1 };
-          let p2Updated = { ...prev2 };
-          const distance = Math.abs(p1Updated.x - p2Updated.x);
-
-          // P1 attacking P2
-          if (p1Updated.isAttacking && p1Updated.attackType !== 'none') {
-            const attack = ATTACKS[p1Updated.attackType];
-            const inRange = distance < attack.range;
-            const facingRight = p1Updated.facing === 'right' && p2Updated.x > p1Updated.x;
-            const facingLeft = p1Updated.facing === 'left' && p2Updated.x < p1Updated.x;
-
-            if (inRange && (facingRight || facingLeft) && p2Updated.stunned <= 0) {
-              const damage = attack.damage + Math.floor(Math.random() * 5);
-              p2Updated.health = Math.max(0, p2Updated.health - damage);
-              p2Updated.vx = (p1Updated.facing === 'right' ? 1 : -1) * attack.knockback;
-              p2Updated.vy = -8;
-              p2Updated.stunned = 20;
-              p1Updated.combo++;
-              p1Updated.specialCharge = Math.min(100, p1Updated.specialCharge + 10);
-
-              const hitX = (p1Updated.x + p2Updated.x) / 2;
-              const hitY = p2Updated.y - 50;
-              const texts = ['POW!', 'BAM!', 'WHAM!', 'CRASH!', 'BOOM!'];
-              if (p1Updated.attackType === 'special') {
-                addHitEffect(hitX, hitY, `💥 SUPER! -${damage}`);
+          // AI makes decisions more frequently for better responsiveness
+          if (aiDecisionTimer.current % 5 === 0) {
+            // Aggressive movement - always try to get in attack range
+            if (distance > 100) {
+              p2.vx = playerIsLeft ? -MOVE_SPEED * 0.9 : MOVE_SPEED * 0.9;
+            } else if (distance < 60) {
+              // Too close, back up slightly or attack
+              if (p2.attackCooldown <= 0) {
+                // Attack immediately when close!
+                const rand = Math.random();
+                if (p2.specialCharge >= 100) {
+                  p2.isAttacking = true; p2.attackType = 'special'; p2.specialCharge = 0;
+                } else if (rand > 0.4) {
+                  p2.isAttacking = true; p2.attackType = 'kick'; p2.attackCooldown = ATTACKS.kick.cooldown;
+                } else {
+                  p2.isAttacking = true; p2.attackType = 'punch'; p2.attackCooldown = ATTACKS.punch.cooldown;
+                }
               } else {
-                addHitEffect(hitX, hitY, `${texts[Math.floor(Math.random() * texts.length)]} -${damage}`);
+                // Back away while on cooldown
+                p2.vx = playerIsLeft ? MOVE_SPEED * 0.5 : -MOVE_SPEED * 0.5;
               }
+            } else {
+              // In attack range - attack!
+              if (p2.attackCooldown <= 0) {
+                const rand = Math.random();
+                if (p2.specialCharge >= 100 && rand > 0.5) {
+                  p2.isAttacking = true; p2.attackType = 'special'; p2.specialCharge = 0;
+                } else if (rand > 0.3) {
+                  p2.isAttacking = true; p2.attackType = 'kick'; p2.attackCooldown = ATTACKS.kick.cooldown;
+                } else {
+                  p2.isAttacking = true; p2.attackType = 'punch'; p2.attackCooldown = ATTACKS.punch.cooldown;
+                }
+              }
+              p2.vx *= 0.8;
+            }
+
+            // Jump to dodge or close distance
+            if (!p2.isJumping && Math.random() > 0.92) {
+              p2.vy = JUMP_FORCE; p2.isJumping = true;
             }
           }
+        }
+      } else {
+        p2.vx *= 0.8;
+      }
 
-          // P2 attacking P1
-          if (p2Updated.isAttacking && p2Updated.attackType !== 'none') {
-            const attack = ATTACKS[p2Updated.attackType];
-            const inRange = distance < attack.range;
-            const facingRight = p2Updated.facing === 'right' && p1Updated.x > p2Updated.x;
-            const facingLeft = p2Updated.facing === 'left' && p1Updated.x < p2Updated.x;
+      p2.vy += GRAVITY; p2.x += p2.vx; p2.y += p2.vy;
+      if (p2.y >= GROUND_Y) { p2.y = GROUND_Y; p2.vy = 0; p2.isJumping = false; }
+      p2.x = Math.max(50, Math.min(GAME_WIDTH - 50, p2.x));
+      if (p2.attackCooldown <= ATTACKS[p2.attackType === 'none' ? 'punch' : p2.attackType].cooldown - 5) {
+        p2.isAttacking = false; p2.attackType = 'none';
+      }
 
-            if (inRange && (facingRight || facingLeft) && p1Updated.stunned <= 0) {
-              const damage = attack.damage + Math.floor(Math.random() * 5);
-              p1Updated.health = Math.max(0, p1Updated.health - damage);
-              p1Updated.vx = (p2Updated.facing === 'right' ? 1 : -1) * attack.knockback;
-              p1Updated.vy = -8;
-              p1Updated.stunned = 20;
-              p2Updated.combo++;
-              p2Updated.specialCharge = Math.min(100, p2Updated.specialCharge + 10);
+      // === HIT DETECTION (now sees current state!) ===
+      const distance = Math.abs(p1.x - p2.x);
 
-              const hitX = (p1Updated.x + p2Updated.x) / 2;
-              const hitY = p1Updated.y - 50;
-              const texts = ['POW!', 'BAM!', 'WHAM!', 'CRASH!', 'BOOM!'];
-              if (p2Updated.attackType === 'special') {
-                addHitEffect(hitX, hitY, `💥 SUPER! -${damage}`);
-              } else {
-                addHitEffect(hitX, hitY, `${texts[Math.floor(Math.random() * texts.length)]} -${damage}`);
-              }
-            }
-          }
+      // P1 attacking P2
+      if (p1.isAttacking && p1.attackType !== 'none') {
+        const attack = ATTACKS[p1.attackType];
+        const attackType = p1.attackType;
+        const inRange = distance < attack.range;
+        const facingCorrect = (p1.facing === 'right' && p2.x > p1.x) || (p1.facing === 'left' && p2.x < p1.x);
 
-          // Check for KO
-          if (p1Updated.health <= 0) {
-            setWinner('prime');
-            setPrimeScore(s => s + 1);
-            setGameState('roundEnd');
-          } else if (p2Updated.health <= 0) {
-            setWinner('optimus');
-            setOptimusScore(s => s + 1);
-            setGameState('roundEnd');
-          }
+        if (inRange && facingCorrect && p2.stunned <= 0) {
+          const damage = attack.damage + Math.floor(Math.random() * 5);
+          p2.health = Math.max(0, p2.health - damage);
+          p2.vx = (p1.facing === 'right' ? 1 : -1) * attack.knockback;
+          p2.vy = -8;
+          p2.stunned = 20;
+          p1.combo++;
+          p1.specialCharge = Math.min(100, p1.specialCharge + 10);
+          p1.isAttacking = false; p1.attackType = 'none'; // Prevent multi-hit
 
-          // Return p2 state
-          return p2Updated;
-        });
-        return prev1;
-      });
+          const texts = ['POW!', 'BAM!', 'WHAM!', 'CRASH!', 'BOOM!'];
+          addHitEffect((p1.x + p2.x) / 2, p2.y - 50,
+            attackType === 'special' ? `💥 SUPER! -${damage}` : `${texts[Math.floor(Math.random() * texts.length)]} -${damage}`);
+        }
+      }
+
+      // P2 attacking P1
+      if (p2.isAttacking && p2.attackType !== 'none') {
+        const attack = ATTACKS[p2.attackType];
+        const attackType = p2.attackType;
+        const inRange = distance < attack.range;
+        const facingCorrect = (p2.facing === 'right' && p1.x > p2.x) || (p2.facing === 'left' && p1.x < p2.x);
+
+        if (inRange && facingCorrect && p1.stunned <= 0) {
+          const damage = attack.damage + Math.floor(Math.random() * 5);
+          p1.health = Math.max(0, p1.health - damage);
+          p1.vx = (p2.facing === 'right' ? 1 : -1) * attack.knockback;
+          p1.vy = -8;
+          p1.stunned = 20;
+          p2.combo++;
+          p2.specialCharge = Math.min(100, p2.specialCharge + 10);
+          p2.isAttacking = false; p2.attackType = 'none'; // Prevent multi-hit
+
+          const texts = ['POW!', 'BAM!', 'WHAM!', 'CRASH!', 'BOOM!'];
+          addHitEffect((p1.x + p2.x) / 2, p1.y - 50,
+            attackType === 'special' ? `💥 SUPER! -${damage}` : `${texts[Math.floor(Math.random() * texts.length)]} -${damage}`);
+        }
+      }
+
+      // Check for KO
+      if (p1.health <= 0) {
+        setWinner('prime');
+        setPrimeScore(s => s + 1);
+        setGameState('roundEnd');
+      } else if (p2.health <= 0) {
+        setWinner('optimus');
+        setOptimusScore(s => s + 1);
+        setGameState('roundEnd');
+      }
+
+      // Sync refs to React state for rendering
+      setP1({ ...p1 });
+      setP2({ ...p2 });
 
     }, 1000 / 60);
 
