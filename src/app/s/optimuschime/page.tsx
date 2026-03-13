@@ -49,7 +49,7 @@ export default function ChimeFighters() {
   const [primeScore, setPrimeScore] = useState(0);
   const [round, setRound] = useState(1);
   const [winner, setWinner] = useState<'optimus' | 'prime' | 'draw' | null>(null);
-  const [hitEffects, setHitEffects] = useState<{ x: number; y: number; text: string; id: number }[]>([]);
+  const [hitEffects, setHitEffects] = useState<{ x: number; y: number; text: string; id: number; attacker: 'optimus' | 'prime' }[]>([]);
 
   const keysPressed = useRef<Set<string>>(new Set());
   const effectId = useRef(0);
@@ -84,9 +84,9 @@ export default function ChimeFighters() {
     setGameState('fighting');
   }, [resetPlayers]);
 
-  const addHitEffect = useCallback((x: number, y: number, text: string) => {
+  const addHitEffect = useCallback((x: number, y: number, text: string, attacker: 'optimus' | 'prime') => {
     const id = effectId.current++;
-    setHitEffects(prev => [...prev, { x, y, text, id }]);
+    setHitEffects(prev => [...prev, { x, y, text, id, attacker }]);
     setTimeout(() => {
       setHitEffects(prev => prev.filter(e => e.id !== id));
     }, 500);
@@ -296,7 +296,7 @@ export default function ChimeFighters() {
 
           const texts = ['POW!', 'BAM!', 'WHAM!', 'CRASH!', 'BOOM!'];
           addHitEffect((p1.x + p2.x) / 2, p2.y - 50,
-            attackType === 'special' ? `💥 SUPER! -${damage}` : `${texts[Math.floor(Math.random() * texts.length)]} -${damage}`);
+            attackType === 'special' ? `💥 SUPER! -${damage}` : `${texts[Math.floor(Math.random() * texts.length)]} -${damage}`, 'optimus');
         }
       }
 
@@ -319,7 +319,7 @@ export default function ChimeFighters() {
 
           const texts = ['POW!', 'BAM!', 'WHAM!', 'CRASH!', 'BOOM!'];
           addHitEffect((p1.x + p2.x) / 2, p1.y - 50,
-            attackType === 'special' ? `💥 SUPER! -${damage}` : `${texts[Math.floor(Math.random() * texts.length)]} -${damage}`);
+            attackType === 'special' ? `💥 SUPER! -${damage}` : `${texts[Math.floor(Math.random() * texts.length)]} -${damage}`, 'prime');
         }
       }
 
@@ -527,14 +527,19 @@ export default function ChimeFighters() {
         {hitEffects.map(effect => (
           <div
             key={effect.id}
-            className="absolute text-2xl font-black text-yellow-300 pointer-events-none"
+            className={`absolute text-2xl font-black pointer-events-none ${
+              effect.attacker === 'optimus' ? 'text-red-400' : 'text-yellow-400'
+            }`}
             style={{
               left: effect.x,
               top: effect.y,
-              textShadow: '0 0 10px red',
+              textShadow: effect.attacker === 'optimus' ? '0 0 10px #ff0000, 0 0 20px #ff0000' : '0 0 10px #ffaa00, 0 0 20px #ffaa00',
               animation: 'hitPop 0.5s ease-out forwards'
             }}
           >
+            <div className="text-xs mb-1 opacity-80">
+              {effect.attacker === 'optimus' ? '⚡ OPTIMUS' : '🤖 PRIME'}
+            </div>
             {effect.text}
           </div>
         ))}
