@@ -309,49 +309,79 @@ export default function ChimeFighters() {
           // Always face player
           p2.facing = playerIsLeft ? 'left' : 'right';
 
-          // AI makes decisions slowly (every 15 frames = ~4 times per second)
-          if (aiDecisionTimer.current % 15 === 0) {
-            // Casual movement - sometimes approach, sometimes idle
-            if (distance > 150 && Math.random() > 0.3) {
-              // Move toward player slowly
-              p2.vx = playerIsLeft ? -MOVE_SPEED * 0.5 : MOVE_SPEED * 0.5;
-            } else if (distance < 70) {
-              // Sometimes back away, sometimes attack
-              if (Math.random() > 0.6) {
-                p2.vx = playerIsLeft ? MOVE_SPEED * 0.4 : -MOVE_SPEED * 0.4;
-              } else if (p2.attackCooldown <= 0 && Math.random() > 0.5) {
-                // 50% chance to attack when close
+          // Dynamic AI personality - changes based on health and situation
+          const aiAggression = p2.health < 40 ? 0.8 : p2.health > p1.health ? 0.4 : 0.6;
+          const isLosing = p2.health < p1.health;
+
+          // React to player attacking - try to dodge or counter!
+          if (p1.isAttacking && distance < 120 && Math.random() > 0.5) {
+            // Dodge by jumping or backing away
+            if (!p2.isJumping && Math.random() > 0.4) {
+              p2.vy = JUMP_FORCE; p2.isJumping = true;
+            } else {
+              p2.vx = playerIsLeft ? MOVE_SPEED * 0.8 : -MOVE_SPEED * 0.8;
+            }
+          }
+
+          // AI makes decisions every 10 frames
+          if (aiDecisionTimer.current % 10 === 0) {
+            // Movement based on distance and aggression
+            if (distance > 200) {
+              // Far away - approach at varying speeds
+              const speed = MOVE_SPEED * (0.5 + Math.random() * 0.3);
+              p2.vx = playerIsLeft ? -speed : speed;
+            } else if (distance > 100) {
+              // Mid range - mix of approach and feints
+              if (Math.random() < aiAggression) {
+                p2.vx = playerIsLeft ? -MOVE_SPEED * 0.6 : MOVE_SPEED * 0.6;
+              } else {
+                // Feint - move back then forward
+                p2.vx = playerIsLeft ? MOVE_SPEED * 0.3 : -MOVE_SPEED * 0.3;
+              }
+            } else if (distance < 60) {
+              // Close range - attack or create space
+              if (p2.attackCooldown <= 0 && Math.random() < aiAggression) {
                 const rand = Math.random();
-                if (p2.specialCharge >= 100 && rand > 0.8) {
+                if (p2.specialCharge >= 100 && (isLosing || rand > 0.7)) {
                   p2.isAttacking = true; p2.attackType = 'special'; p2.specialCharge = 0;
-                } else if (rand > 0.6) {
+                } else if (rand > 0.5) {
                   p2.isAttacking = true; p2.attackType = 'kick'; p2.attackCooldown = ATTACKS.kick.cooldown;
-                } else if (rand > 0.4) {
+                } else {
                   p2.isAttacking = true; p2.attackType = 'punch'; p2.attackCooldown = ATTACKS.punch.cooldown;
                 }
-                // else: AI hesitates and doesn't attack
+              } else {
+                // Back away to reset
+                p2.vx = playerIsLeft ? MOVE_SPEED * 0.5 : -MOVE_SPEED * 0.5;
               }
             } else {
-              // In mid range - sometimes attack, often idle
-              if (p2.attackCooldown <= 0 && Math.random() > 0.7) {
-                // Only 30% chance to attack
+              // In attack range (60-100) - the sweet spot
+              if (p2.attackCooldown <= 0 && Math.random() < (aiAggression * 0.8)) {
                 const rand = Math.random();
-                if (rand > 0.7) {
+                if (p2.specialCharge >= 100 && rand > 0.6) {
+                  p2.isAttacking = true; p2.attackType = 'special'; p2.specialCharge = 0;
+                } else if (rand > 0.4) {
                   p2.isAttacking = true; p2.attackType = 'kick'; p2.attackCooldown = ATTACKS.kick.cooldown;
-                } else if (rand > 0.5) {
+                } else {
                   p2.isAttacking = true; p2.attackType = 'punch'; p2.attackCooldown = ATTACKS.punch.cooldown;
                 }
               }
-              p2.vx *= 0.7;
+              p2.vx *= 0.8;
             }
 
-            // Rarely jump
-            if (!p2.isJumping && Math.random() > 0.97) {
-              p2.vy = JUMP_FORCE; p2.isJumping = true;
+            // Dynamic jumping - more when losing or to dodge
+            if (!p2.isJumping) {
+              const jumpChance = isLosing ? 0.12 : 0.06;
+              if (Math.random() < jumpChance) {
+                p2.vy = JUMP_FORCE; p2.isJumping = true;
+                // Jump toward or away from player
+                if (Math.random() > 0.5) {
+                  p2.vx = playerIsLeft ? -MOVE_SPEED * 0.5 : MOVE_SPEED * 0.5;
+                }
+              }
             }
           } else {
-            // Between decisions, slow down
-            p2.vx *= 0.9;
+            // Smooth movement between decisions
+            p2.vx *= 0.92;
           }
         }
       } else {
